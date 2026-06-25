@@ -28,6 +28,19 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## Run Web Version
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-web.txt
+PYTHONPATH=src uvicorn profitmap.web.app:app --host 0.0.0.0 --port 8000
+```
+
+Then open `http://localhost:8000`.
+
+On a server, the included systemd and nginx configs are in `deploy/`.
+
 On macOS/Linux:
 
 ```bash

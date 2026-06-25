@@ -1,0 +1,361 @@
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+let state = {};
+let selectedProduct = null;
+
+const fields = [
+  ["name", "Название", "text"],
+  ["sku", "Артикул", "text"],
+  ["category", "Категория", "text"],
+  ["subcategory", "Подкатегория", "text"],
+  ["brand", "Бренд", "text"],
+  ["stock", "Остаток", "number"],
+  ["expected_monthly_sales", "Продажи/мес.", "number"],
+  ["purchase_price", "Закупочная цена", "number"],
+  ["sale_price", "Цена продажи", "number"],
+  ["logistics", "Логистика", "number"],
+  ["marketplace_fee", "Комиссия", "number"],
+  ["advertising", "Реклама", "number"],
+  ["packaging", "Упаковка", "number"],
+  ["taxes", "Налоги", "number"],
+  ["other_costs", "Прочие расходы", "number"],
+  ["fixed_cost_allocation", "Постоянные расходы", "number"],
+  ["supplier_name", "Поставщик", "text"],
+  ["supplier_contact", "Контакт", "text"],
+  ["supplier_phone", "Телефон", "text"],
+  ["supplier_email", "Email", "text"],
+  ["supplier_site", "Сайт", "text"],
+  ["product_url", "Ссылка на товар", "text"],
+  ["lead_time_days", "Срок поставки", "number"],
+  ["minimum_order_quantity", "Мин. партия", "number"],
+];
+
+document.addEventListener("DOMContentLoaded", async () => {
+  bindNavigation();
+  bindActions();
+  await loadState();
+});
+
+function bindNavigation() {
+  document.querySelectorAll(".nav").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".nav").forEach((item) => item.classList.remove("active"));
+      document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      document.getElementById(button.dataset.view).classList.add("active");
+      if (button.dataset.view === "analytics") renderAnalytics();
+    });
+  });
+
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    document.body.classList.toggle("dark");
+    document.getElementById("themeToggle").textContent = document.body.classList.contains("dark") ? "Светлая тема" : "Темная тема";
+    if (selectedProduct) renderChart(selectedProduct);
+  });
+}
+
+function bindActions() {
+  document.getElementById("search").addEventListener("input", renderProducts);
+  document.getElementById("targetProfit").addEventListener("change", () => selectedProduct && renderChart(readProductForm()));
+  document.getElementById("saveProduct").addEventListener("click", saveProduct);
+  document.getElementById("newProduct").addEventListener("click", createProduct);
+  document.getElementById("runAi").addEventListener("click", runAi);
+  document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
+  document.getElementById("expenseForm").addEventListener("submit", addExpense);
+  document.querySelector("[name='expense_date']").valueAsDate = new Date();
+}
+
+async function loadState() {
+  state = await fetchJson("/api/state");
+  selectedProduct = state.selectedProduct;
+  renderProducts();
+  renderSelectedProduct();
+  renderExpenses();
+  renderAnalytics();
+}
+
+function renderProducts() {
+  const query = document.getElementById("search").value.toLowerCase();
+  const rows = (state.products || []).filter((product) =>
+    `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query),
+  );
+  document.getElementById("productsTable").innerHTML = rows
+    .map(
+      (product) => `
+        <tr class="${selectedProduct && selectedProduct.id === product.id ? "selected" : ""}" data-id="${product.id}">
+          <td>${escapeHtml(product.sku)}</td>
+          <td>${escapeHtml(product.name)}</td>
+          <td>${escapeHtml(product.category || "")}</td>
+          <td class="numeric">${product.stock}</td>
+          <td class="numeric">${money.format(product.sale_price)}</td>
+          <td class="numeric ${product.profit_per_unit >= 0 ? "positive" : "negative"}">${money.format(product.profit_per_unit)}</td>
+          <td class="numeric">${product.margin_percent.toFixed(1)}%</td>
+          <td class="numeric">${product.roi_percent.toFixed(1)}%</td>
+        </tr>`,
+    )
+    .join("");
+
+  document.querySelectorAll("#productsTable tr").forEach((row) => {
+    row.addEventListener("click", async () => {
+      selectedProduct = await fetchJson(`/api/products/${row.dataset.id}`);
+      renderProducts();
+      renderSelectedProduct();
+    });
+  });
+}
+
+function renderSelectedProduct() {
+  if (!selectedProduct) return;
+  document.getElementById("detailTitle").textContent = selectedProduct.name;
+  const form = document.getElementById("productForm");
+  form.innerHTML = fields
+    .map(([name, label, type]) => {
+      const value = selectedProduct[name] ?? "";
+      const step = type === "number" ? ' step="0.01"' : "";
+      return `<div class="field"><label>${label}</label><input name="${name}" type="${type}"${step} value="${escapeAttribute(value)}" /></div>`;
+    })
+    .join("");
+  form.querySelectorAll("input").forEach((input) => input.addEventListener("input", handleLiveRecalculate));
+  renderProductEconomics(selectedProduct);
+  renderChart(selectedProduct);
+}
+
+function handleLiveRecalculate() {
+  const product = readProductForm();
+  renderProductEconomics(product);
+  renderChart(product);
+}
+
+function readProductForm() {
+  const data = { ...selectedProduct };
+  new FormData(document.getElementById("productForm")).forEach((value, key) => {
+    const field = fields.find(([name]) => name === key);
+    data[key] = field && field[2] === "number" ? Number(value || 0) : value;
+  });
+  data.economics = calculateEconomics(data, Number(document.getElementById("targetProfit").value));
+  return data;
+}
+
+function calculateEconomics(product, targetProfit) {
+  const variableCost =
+    Number(product.purchase_price) +
+    Number(product.logistics) +
+    Number(product.marketplace_fee) +
+    Number(product.advertising) +
+    Number(product.packaging) +
+    Number(product.taxes) +
+    Number(product.other_costs);
+  const expectedSales = Math.max(Number(product.expected_monthly_sales || 1), 1);
+  const fullCost = variableCost + Number(product.fixed_cost_allocation || 0) / expectedSales;
+  const gross = Number(product.sale_price) - variableCost;
+  const net = Number(product.sale_price) - fullCost;
+  const contribution = Number(product.sale_price) - variableCost;
+  return {
+    variable_cost: variableCost,
+    full_cost_per_unit: fullCost,
+    gross_profit: gross,
+    net_profit_per_unit: net,
+    margin_percent: product.sale_price ? (net / Number(product.sale_price)) * 100 : 0,
+    markup_percent: fullCost ? (net / fullCost) * 100 : 0,
+    roi_percent: variableCost ? (net / variableCost) * 100 : 0,
+    break_even_units: contribution > 0 ? Math.ceil(Number(product.fixed_cost_allocation || 0) / contribution) : null,
+    target_units: contribution > 0 ? Math.ceil((Number(product.fixed_cost_allocation || 0) + targetProfit) / contribution) : null,
+    minimum_price: fullCost,
+    recommended_price: fullCost * 1.25,
+    aggressive_price: Math.max(variableCost * 1.08, fullCost * 1.08),
+    premium_price: fullCost * 1.65,
+  };
+}
+
+function renderProductEconomics(product) {
+  const economics = product.economics || calculateEconomics(product, 1000);
+  document.getElementById("productMetrics").innerHTML = [
+    ["Полная себестоимость", money.format(economics.full_cost_per_unit)],
+    ["Валовая прибыль", money.format(economics.gross_profit)],
+    ["Чистая прибыль", money.format(economics.net_profit_per_unit)],
+    ["Маржа", `${Number(economics.margin_percent).toFixed(1)}%`],
+    ["Наценка", `${Number(economics.markup_percent).toFixed(1)}%`],
+    ["ROI", `${Number(economics.roi_percent).toFixed(1)}%`],
+    ["Безубыточность", `${economics.break_even_units || 0} шт.`],
+    ["Целевой объем", `${economics.target_units || 0} шт.`],
+  ]
+    .map(metric)
+    .join("");
+
+  document.getElementById("pricing").innerHTML = [
+    ["Минимальная цена", money.format(economics.minimum_price)],
+    ["Рекомендуемая", money.format(economics.recommended_price)],
+    ["Агрессивная", money.format(economics.aggressive_price)],
+    ["Премиальная", money.format(economics.premium_price)],
+  ]
+    .map(metric)
+    .join("");
+}
+
+function renderChart(product) {
+  const economics = product.economics || calculateEconomics(product, Number(document.getElementById("targetProfit").value));
+  const salePrice = Number(product.sale_price || 0);
+  const fixed = Number(product.fixed_cost_allocation || 0);
+  const variable = Number(economics.variable_cost || 0);
+  const maxUnits = Math.max(100, Math.ceil((economics.target_units || economics.break_even_units || 100) * 1.35));
+  const x = Array.from({ length: 160 }, (_, index) => (index / 159) * maxUnits);
+  const revenue = x.map((units) => salePrice * units);
+  const costs = x.map((units) => variable * units + fixed);
+  const fixedLine = x.map(() => fixed);
+  const dark = document.body.classList.contains("dark");
+
+  const traces = [
+    { x, y: revenue, mode: "lines", name: "Валовые поступления", line: { color: dark ? "#f9fafb" : "#111827", width: 4 } },
+    { x, y: costs, mode: "lines", name: "Валовые издержки", line: { color: "#2563eb", width: 4 } },
+    { x, y: fixedLine, mode: "lines", name: "Постоянные издержки", line: { color: "#8b5cf6", width: 3 } },
+  ];
+  if (economics.break_even_units) {
+    traces.push({
+      x: [economics.break_even_units],
+      y: [salePrice * economics.break_even_units],
+      mode: "markers+text",
+      name: "Точка безубыточности",
+      text: [`${economics.break_even_units} шт.`],
+      textposition: "top center",
+      marker: { color: "#ef4444", size: 12 },
+    });
+  }
+  if (economics.target_units) {
+    traces.push({
+      x: [economics.target_units],
+      y: [salePrice * economics.target_units],
+      mode: "markers+text",
+      name: "Целевая прибыль",
+      text: [`${economics.target_units} шт.`],
+      textposition: "bottom center",
+      marker: { color: "#22c55e", size: 12 },
+    });
+  }
+
+  Plotly.react("breakEvenChart", traces, {
+    paper_bgcolor: "transparent",
+    plot_bgcolor: "transparent",
+    font: { color: dark ? "#e5e7eb" : "#111827" },
+    margin: { t: 20, r: 18, b: 45, l: 58 },
+    xaxis: { title: "Объем продаж, шт.", gridcolor: dark ? "#263142" : "#e5e7eb" },
+    yaxis: { title: "Деньги, $", gridcolor: dark ? "#263142" : "#e5e7eb" },
+    legend: { orientation: "h" },
+  }, { responsive: true, displayModeBar: false });
+}
+
+async function saveProduct() {
+  const payload = readProductForm();
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  await loadState();
+}
+
+async function createProduct() {
+  selectedProduct = await fetchJson("/api/products", {
+    method: "POST",
+    body: JSON.stringify({ name: "Новый товар", sku: "", category: "Без категории", expected_monthly_sales: 100 }),
+  });
+  await loadState();
+}
+
+function renderAnalytics() {
+  const analytics = state.analytics || {};
+  document.getElementById("analyticsMetrics").innerHTML = [
+    ["Выручка", money.format(analytics.total_revenue || 0)],
+    ["Прибыль", money.format(analytics.total_profit || 0)],
+    ["Cash Flow", money.format(analytics.cash_flow || 0)],
+    ["Маржа", `${Number(analytics.margin_percent || 0).toFixed(1)}%`],
+    ["Топ товаров", analytics.profitable_count || 0],
+    ["Убыточные", analytics.loss_count || 0],
+    ["ABC-анализ", "A/B/C"],
+    ["Pareto 80/20", "активен"],
+  ]
+    .map(metric)
+    .join("");
+
+  document.getElementById("coefficientsTable").innerHTML = (analytics.coefficients || [])
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.name)}</td>
+          <td>${escapeHtml(row.formula)}</td>
+          <td>${escapeHtml(row.calculation)}</td>
+          <td class="numeric">${Number(row.percent).toFixed(1)}%</td>
+        </tr>`,
+    )
+    .join("");
+
+  document.getElementById("analyticsTable").innerHTML = (analytics.rows || [])
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.product)}</td>
+          <td class="numeric">${money.format(row.revenue)}</td>
+          <td class="numeric ${row.profit >= 0 ? "positive" : "negative"}">${money.format(row.profit)}</td>
+          <td>${row.abc}</td>
+          <td class="numeric">${Number(row.forecast_30_days).toFixed(0)} шт.</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+function renderExpenses() {
+  document.getElementById("expensesTable").innerHTML = (state.expenses || [])
+    .map(
+      (expense) => `
+        <tr>
+          <td>${expense.expense_date}</td>
+          <td>${escapeHtml(expense.category)}</td>
+          <td class="numeric">${money.format(expense.amount)}</td>
+          <td>${escapeHtml(expense.reason || "")}</td>
+          <td>${escapeHtml(expense.comment || "")}</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+async function addExpense(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.amount = Number(payload.amount || 0);
+  await fetchJson("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
+  form.reset();
+  form.querySelector("[name='expense_date']").valueAsDate = new Date();
+  await loadState();
+}
+
+async function allocateExpenses() {
+  const method = document.getElementById("allocationMethod").value;
+  await fetchJson("/api/allocate-expenses", { method: "POST", body: JSON.stringify({ method }) });
+  await loadState();
+}
+
+async function runAi() {
+  const output = document.getElementById("aiOutput");
+  output.textContent = "Анализирую бизнес...";
+  const result = await fetchJson("/api/analyze", { method: "POST" });
+  output.textContent = result.text;
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function metric([label, value]) {
+  return `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}

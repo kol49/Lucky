@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ProfitMap Web</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">ProfitMap</div>
+      <button class="nav active" data-view="products">Товары</button>
+      <button class="nav" data-view="analytics">Аналитика</button>
+      <button class="nav" data-view="expenses">Расходы</button>
+      <button class="nav" data-view="ai">AI-консультант</button>
+      <button class="theme-toggle" id="themeToggle">Темная тема</button>
+    </aside>
+
+    <main>
+      <section class="view active" id="products">
+        <header class="topbar">
+          <div>
+            <h1>Товары</h1>
+            <p>Юнит-экономика, цены и точка безубыточности по каждому товару.</p>
+          </div>
+          <div class="actions">
+            <input id="search" placeholder="Поиск по товару, SKU или поставщику" />
+            <button id="newProduct">Добавить товар</button>
+          </div>
+        </header>
+
+        <div class="workspace">
+          <section class="panel table-panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Название</th>
+                  <th>Категория</th>
+                  <th>Остаток</th>
+                  <th>Продажа</th>
+                  <th>Прибыль</th>
+                  <th>Маржа</th>
+                  <th>ROI</th>
+                </tr>
+              </thead>
+              <tbody id="productsTable"></tbody>
+            </table>
+          </section>
+
+          <section class="panel detail-panel">
+            <div class="detail-head">
+              <h2 id="detailTitle">Карточка товара</h2>
+              <button id="saveProduct">Сохранить</button>
+            </div>
+            <div class="metrics" id="productMetrics"></div>
+            <div class="detail-grid">
+              <form id="productForm" class="form-grid"></form>
+              <div>
+                <div class="target-row">
+                  <label>Целевая прибыль</label>
+                  <select id="targetProfit">
+                    <option value="500">$500</option>
+                    <option value="1000" selected>$1,000</option>
+                    <option value="5000">$5,000</option>
+                    <option value="10000">$10,000</option>
+                  </select>
+                </div>
+                <div id="breakEvenChart" class="chart"></div>
+                <div class="pricing" id="pricing"></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="analytics">
+        <header class="topbar">
+          <div>
+            <h1>Аналитика</h1>
+            <p>Выручка, прибыль, cash flow, ABC/Pareto и коэффициенты прибыльности.</p>
+          </div>
+        </header>
+        <div class="metrics" id="analyticsMetrics"></div>
+        <section class="panel">
+          <h2>Коэффициенты прибыльности</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Коэффициент</th>
+                <th>Формула расчета</th>
+                <th>Расчет по данным ProfitMap</th>
+                <th>Итог</th>
+              </tr>
+            </thead>
+            <tbody id="coefficientsTable"></tbody>
+          </table>
+        </section>
+        <section class="panel">
+          <h2>Товарная аналитика</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Выручка</th>
+                <th>Прибыль</th>
+                <th>ABC</th>
+                <th>Прогноз 30 дней</th>
+              </tr>
+            </thead>
+            <tbody id="analyticsTable"></tbody>
+          </table>
+        </section>
+      </section>
+
+      <section class="view" id="expenses">
+        <header class="topbar">
+          <div>
+            <h1>Постоянные расходы</h1>
+            <p>Добавление расходов и распределение между товарами.</p>
+          </div>
+          <div class="actions">
+            <select id="allocationMethod">
+              <option value="revenue">По выручке</option>
+              <option value="sales_quantity">По количеству продаж</option>
+              <option value="margin">По марже</option>
+              <option value="manual">Ручное распределение</option>
+            </select>
+            <button id="allocateExpenses">Распределить</button>
+          </div>
+        </header>
+        <section class="panel">
+          <form id="expenseForm" class="expense-form">
+            <input type="date" name="expense_date" required />
+            <select name="category">
+              <option>Аренда</option>
+              <option>Зарплаты</option>
+              <option>Интернет</option>
+              <option>Электричество</option>
+              <option>Бухгалтерия</option>
+              <option>Подписки</option>
+              <option>Реклама</option>
+              <option>Транспорт</option>
+              <option>Прочее</option>
+            </select>
+            <input name="amount" type="number" min="0" step="0.01" placeholder="Сумма" required />
+            <input name="reason" placeholder="Причина расхода" />
+            <input name="comment" placeholder="Комментарий" />
+            <button>Добавить</button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Категория</th>
+                <th>Сумма</th>
+                <th>Причина</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody id="expensesTable"></tbody>
+          </table>
+        </section>
+      </section>
+
+      <section class="view" id="ai">
+        <header class="topbar">
+          <div>
+            <h1>AI бизнес-консультант</h1>
+            <p>Рекомендации по ценам, закупкам, рекламе и ассортименту.</p>
+          </div>
+          <button id="runAi">Анализировать бизнес</button>
+        </header>
+        <section class="panel">
+          <pre id="aiOutput">Нажмите кнопку анализа.</pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

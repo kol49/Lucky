@@ -1,11 +1,8 @@
-PySide6>=6.7
 SQLAlchemy>=2.0
-pyqtgraph>=0.13
 pandas>=2.2
 numpy>=1.26
 openai>=1.40
 python-dotenv>=1.0
-pyinstaller>=6.0
 fastapi>=0.115
 uvicorn[standard]>=0.30
 jinja2>=3.1
