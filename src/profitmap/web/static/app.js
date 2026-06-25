@@ -57,6 +57,7 @@ function bindActions() {
   document.getElementById("search").addEventListener("input", renderProducts);
   document.getElementById("targetProfit").addEventListener("change", () => selectedProduct && renderChart(readProductForm()));
   document.getElementById("saveProduct").addEventListener("click", saveProduct);
+  document.getElementById("deleteProduct").addEventListener("click", deleteProduct);
   document.getElementById("newProduct").addEventListener("click", createProduct);
   document.getElementById("runAi").addEventListener("click", runAi);
   document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
@@ -64,9 +65,14 @@ function bindActions() {
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
 }
 
-async function loadState() {
+async function loadState(preferredProductId = null) {
   state = await fetchJson("/api/state");
-  selectedProduct = state.selectedProduct;
+  const targetId = preferredProductId ?? selectedProduct?.id;
+  if (targetId && (state.products || []).some((product) => product.id === targetId)) {
+    selectedProduct = await fetchJson(`/api/products/${targetId}`);
+  } else {
+    selectedProduct = state.selectedProduct;
+  }
   renderProducts();
   renderSelectedProduct();
   renderExpenses();
@@ -78,7 +84,7 @@ function renderProducts() {
   const rows = (state.products || []).filter((product) =>
     `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query),
   );
-  document.getElementById("productsTable").innerHTML = rows
+  document.getElementById("productsTable").innerHTML = rows.length ? rows
     .map(
       (product) => `
         <tr class="${selectedProduct && selectedProduct.id === product.id ? "selected" : ""}" data-id="${product.id}">
@@ -92,7 +98,7 @@ function renderProducts() {
           <td class="numeric">${product.roi_percent.toFixed(1)}%</td>
         </tr>`,
     )
-    .join("");
+    .join("") : `<tr><td colspan="8" class="empty">Товаров пока нет</td></tr>`;
 
   document.querySelectorAll("#productsTable tr").forEach((row) => {
     row.addEventListener("click", async () => {
@@ -104,7 +110,14 @@ function renderProducts() {
 }
 
 function renderSelectedProduct() {
-  if (!selectedProduct) return;
+  if (!selectedProduct) {
+    document.getElementById("detailTitle").textContent = "Карточка товара";
+    document.getElementById("productForm").innerHTML = `<div class="empty-form">Добавьте товар, чтобы рассчитать юнит-экономику и построить график.</div>`;
+    document.getElementById("productMetrics").innerHTML = "";
+    document.getElementById("pricing").innerHTML = "";
+    Plotly.purge("breakEvenChart");
+    return;
+  }
   document.getElementById("detailTitle").textContent = selectedProduct.name;
   const form = document.getElementById("productForm");
   form.innerHTML = fields
@@ -232,22 +245,50 @@ function renderChart(product) {
   }
 
   Plotly.react("breakEvenChart", traces, {
+    autosize: true,
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
     font: { color: dark ? "#e5e7eb" : "#111827" },
-    margin: { t: 20, r: 18, b: 45, l: 58 },
-    xaxis: { title: "Объем продаж, шт.", gridcolor: dark ? "#263142" : "#e5e7eb" },
-    yaxis: { title: "Деньги, $", gridcolor: dark ? "#263142" : "#e5e7eb" },
-    legend: { orientation: "h" },
+    margin: { t: 24, r: 22, b: 128, l: 68 },
+    xaxis: {
+      title: { text: "Объем продаж, шт.", standoff: 32 },
+      automargin: true,
+      gridcolor: dark ? "#263142" : "#e5e7eb",
+      zerolinecolor: dark ? "#3b4558" : "#d1d5db",
+    },
+    yaxis: {
+      title: { text: "Деньги, $", standoff: 16 },
+      automargin: true,
+      gridcolor: dark ? "#263142" : "#e5e7eb",
+      zerolinecolor: dark ? "#3b4558" : "#d1d5db",
+    },
+    legend: {
+      orientation: "h",
+      x: 0,
+      y: -0.28,
+      xanchor: "left",
+      yanchor: "top",
+      itemwidth: 30,
+    },
   }, { responsive: true, displayModeBar: false });
 }
 
 async function saveProduct() {
+  if (!selectedProduct) return;
   const payload = readProductForm();
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+  await loadState(selectedProduct.id);
+}
+
+async function deleteProduct() {
+  if (!selectedProduct) return;
+  const confirmed = window.confirm(`Удалить товар "${selectedProduct.name}"? История продаж этого товара тоже будет удалена.`);
+  if (!confirmed) return;
+  await fetchJson(`/api/products/${selectedProduct.id}`, { method: "DELETE" });
+  selectedProduct = null;
   await loadState();
 }
 
@@ -256,7 +297,7 @@ async function createProduct() {
     method: "POST",
     body: JSON.stringify({ name: "Новый товар", sku: "", category: "Без категории", expected_monthly_sales: 100 }),
   });
-  await loadState();
+  await loadState(selectedProduct.id);
 }
 
 function renderAnalytics() {
@@ -301,18 +342,24 @@ function renderAnalytics() {
 }
 
 function renderExpenses() {
-  document.getElementById("expensesTable").innerHTML = (state.expenses || [])
+  const expenses = state.expenses || [];
+  document.getElementById("expensesTable").innerHTML = expenses.length ? expenses
     .map(
       (expense) => `
-        <tr>
+        <tr data-id="${expense.id}">
           <td>${expense.expense_date}</td>
           <td>${escapeHtml(expense.category)}</td>
           <td class="numeric">${money.format(expense.amount)}</td>
           <td>${escapeHtml(expense.reason || "")}</td>
           <td>${escapeHtml(expense.comment || "")}</td>
+          <td class="action-cell"><button class="danger icon-button" data-expense-id="${expense.id}" title="Удалить расход">Удалить</button></td>
         </tr>`,
     )
-    .join("");
+    .join("") : `<tr><td colspan="6" class="empty">Расходов пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-expense-id]").forEach((button) => {
+    button.addEventListener("click", deleteExpense);
+  });
 }
 
 async function addExpense(event) {
@@ -323,6 +370,14 @@ async function addExpense(event) {
   await fetchJson("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
   form.reset();
   form.querySelector("[name='expense_date']").valueAsDate = new Date();
+  await loadState();
+}
+
+async function deleteExpense(event) {
+  const expenseId = event.currentTarget.dataset.expenseId;
+  const confirmed = window.confirm("Удалить этот расход?");
+  if (!confirmed) return;
+  await fetchJson(`/api/expenses/${expenseId}`, { method: "DELETE" });
   await loadState();
 }
 

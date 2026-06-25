@@ -2,6 +2,8 @@
 
 ProfitMap is a Windows desktop application for product-level profitability analysis, break-even planning, pricing, assortment decisions, and AI-assisted business recommendations.
 
+The web version supports creating, editing, and deleting products and fixed expenses from the browser.
+
 The analytics dashboard also includes profitability coefficients in report format:
 
 - gross profit share = gross profit / net sales

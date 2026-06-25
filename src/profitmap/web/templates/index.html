@@ -52,12 +52,15 @@
           <section class="panel detail-panel">
             <div class="detail-head">
               <h2 id="detailTitle">Карточка товара</h2>
-              <button id="saveProduct">Сохранить</button>
+              <div class="button-row">
+                <button class="danger subtle" id="deleteProduct">Удалить</button>
+                <button id="saveProduct">Сохранить</button>
+              </div>
             </div>
             <div class="metrics" id="productMetrics"></div>
             <div class="detail-grid">
               <form id="productForm" class="form-grid"></form>
-              <div>
+              <div class="chart-panel">
                 <div class="target-row">
                   <label>Целевая прибыль</label>
                   <select id="targetProfit">
@@ -157,6 +160,7 @@
                 <th>Сумма</th>
                 <th>Причина</th>
                 <th>Комментарий</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="expensesTable"></tbody>

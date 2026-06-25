@@ -123,6 +123,17 @@ def update_product(product_id: int, payload: ProductPayload) -> dict[str, Any]:
         return _product_detail(product)
 
 
+@app.delete("/api/products/{product_id}")
+def delete_product(product_id: int) -> dict[str, str]:
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        session.delete(product)
+        session.commit()
+        return {"status": "deleted"}
+
+
 @app.get("/api/expenses")
 def get_expenses() -> list[dict[str, Any]]:
     with SessionFactory() as session:
@@ -143,6 +154,17 @@ def create_expense(payload: ExpensePayload) -> dict[str, Any]:
         session.add(expense)
         session.commit()
         return _expense_dict(expense)
+
+
+@app.delete("/api/expenses/{expense_id}")
+def delete_expense(expense_id: int) -> dict[str, str]:
+    with SessionFactory() as session:
+        expense = session.get(FixedExpense, expense_id)
+        if not expense:
+            raise HTTPException(status_code=404, detail="Expense not found")
+        session.delete(expense)
+        session.commit()
+        return {"status": "deleted"}
 
 
 @app.post("/api/allocate-expenses")
