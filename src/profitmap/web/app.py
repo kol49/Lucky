@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+import secrets
+import time
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -27,6 +32,15 @@ load_dotenv()
 WEB_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("PROFITMAP_DB", Path.home() / "profitmap_web.sqlite3"))
 SessionFactory = init_database(DB_PATH)
+AUTH_USERNAME = os.getenv("PROFITMAP_USERNAME", "admin")
+AUTH_PASSWORD = os.getenv("PROFITMAP_PASSWORD", "change-me-now")
+SECRET_KEY = os.getenv("PROFITMAP_SECRET_KEY", secrets.token_urlsafe(48))
+SESSION_COOKIE = "profitmap_session"
+SESSION_TTL_SECONDS = int(os.getenv("PROFITMAP_SESSION_TTL_SECONDS", "43200"))
+LOGIN_WINDOW_SECONDS = int(os.getenv("PROFITMAP_LOGIN_WINDOW_SECONDS", "900"))
+LOGIN_LOCK_SECONDS = int(os.getenv("PROFITMAP_LOGIN_LOCK_SECONDS", "900"))
+LOGIN_MAX_ATTEMPTS = int(os.getenv("PROFITMAP_LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_ATTEMPTS: dict[str, dict[str, float]] = {}
 
 app = FastAPI(title="ProfitMap Web", version="0.1.0")
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
@@ -72,9 +86,74 @@ class AllocationPayload(BaseModel):
     method: str
 
 
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    if _is_public_path(request.url.path):
+        return await call_next(request)
+    if _verify_session(request.cookies.get(SESSION_COOKIE)):
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(request, "index.html")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    if _verify_session(request.cookies.get(SESSION_COOKIE)):
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "login.html", {"error": "", "locked_for": 0})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(request: Request):
+    client_ip = _client_ip(request)
+    locked_for = _locked_for(client_ip)
+    if locked_for > 0:
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Слишком много попыток. Попробуйте позже.", "locked_for": int(locked_for)},
+            status_code=429,
+        )
+
+    form = parse_qs((await request.body()).decode("utf-8"))
+    username = form.get("username", [""])[0]
+    password = form.get("password", [""])[0]
+    if hmac.compare_digest(username, AUTH_USERNAME) and hmac.compare_digest(password, AUTH_PASSWORD):
+        LOGIN_ATTEMPTS.pop(client_ip, None)
+        response = RedirectResponse("/", status_code=303)
+        response.set_cookie(
+            SESSION_COOKIE,
+            _create_session(username),
+            httponly=True,
+            secure=os.getenv("PROFITMAP_COOKIE_SECURE", "0") == "1",
+            samesite="lax",
+            max_age=SESSION_TTL_SECONDS,
+        )
+        return response
+
+    locked_for = _record_failed_login(client_ip)
+    message = "Неверный логин или пароль."
+    if locked_for > 0:
+        message = "Слишком много попыток. IP временно заблокирован."
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"error": message, "locked_for": int(locked_for)},
+        status_code=401,
+    )
+
+
+@app.post("/logout")
+def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
 
 
 @app.get("/api/state")
@@ -313,3 +392,65 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
         "rows": ranked,
         "coefficients": [asdict(coefficient) for coefficient in coefficients],
     }
+
+
+def _is_public_path(path: str) -> bool:
+    return path in {"/login", "/favicon.ico"} or path.startswith("/static/")
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _create_session(username: str) -> str:
+    expires_at = int(time.time()) + SESSION_TTL_SECONDS
+    nonce = secrets.token_urlsafe(16)
+    payload = f"{username}|{expires_at}|{nonce}"
+    signature = hmac.new(SECRET_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}|{signature}"
+
+
+def _verify_session(cookie_value: str | None) -> bool:
+    if not cookie_value:
+        return False
+    parts = cookie_value.split("|")
+    if len(parts) != 4:
+        return False
+    username, expires_at, nonce, signature = parts
+    if not nonce:
+        return False
+    try:
+        if int(expires_at) < int(time.time()):
+            return False
+    except ValueError:
+        return False
+    payload = f"{username}|{expires_at}|{nonce}"
+    expected = hmac.new(SECRET_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected) and hmac.compare_digest(username, AUTH_USERNAME)
+
+
+def _locked_for(client_ip: str) -> float:
+    attempt = LOGIN_ATTEMPTS.get(client_ip)
+    if not attempt:
+        return 0
+    locked_until = attempt.get("locked_until", 0)
+    remaining = locked_until - time.time()
+    if remaining <= 0 and locked_until:
+        LOGIN_ATTEMPTS.pop(client_ip, None)
+        return 0
+    return max(remaining, 0)
+
+
+def _record_failed_login(client_ip: str) -> float:
+    now = time.time()
+    attempt = LOGIN_ATTEMPTS.get(client_ip, {"count": 0, "first_attempt": now, "locked_until": 0})
+    if now - attempt.get("first_attempt", now) > LOGIN_WINDOW_SECONDS:
+        attempt = {"count": 0, "first_attempt": now, "locked_until": 0}
+    attempt["count"] = attempt.get("count", 0) + 1
+    if attempt["count"] >= LOGIN_MAX_ATTEMPTS:
+        attempt["locked_until"] = now + LOGIN_LOCK_SECONDS
+    LOGIN_ATTEMPTS[client_ip] = attempt
+    return _locked_for(client_ip)

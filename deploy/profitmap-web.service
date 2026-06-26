@@ -8,6 +8,7 @@ User=root
 WorkingDirectory=/opt/profitmap
 Environment=PYTHONPATH=/opt/profitmap/src
 Environment=PROFITMAP_DB=/opt/profitmap/data/profitmap.sqlite3
+EnvironmentFile=-/opt/profitmap/.env
 ExecStart=/opt/profitmap/.venv/bin/uvicorn profitmap.web.app:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5

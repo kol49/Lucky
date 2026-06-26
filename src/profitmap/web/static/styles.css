@@ -112,6 +112,14 @@ button.danger.subtle {
   text-align: left;
 }
 
+.logout-form {
+  margin: 0;
+}
+
+.logout-button {
+  width: 100%;
+}
+
 .nav.active {
   background: var(--accent);
   color: var(--accent-text);
@@ -119,6 +127,62 @@ button.danger.subtle {
 
 .theme-toggle {
   margin-top: auto;
+}
+
+.login-page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.login-shell {
+  margin: 0;
+  min-height: auto;
+  padding: 20px;
+  width: min(440px, 100%);
+}
+
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 26px;
+}
+
+.login-card .brand {
+  margin: 0 0 18px;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.login-form label {
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.login-form input {
+  width: 100%;
+}
+
+.auth-error {
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bad) 34%, var(--line));
+  border-radius: 8px;
+  color: var(--bad);
+  margin-top: 16px;
+  padding: 10px 12px;
+}
+
+.auth-error span {
+  display: block;
+  margin-top: 4px;
 }
 
 .topbar {

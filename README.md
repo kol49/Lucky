@@ -36,12 +36,15 @@ python main.py
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-web.txt
+cp .env.example .env
 PYTHONPATH=src uvicorn profitmap.web.app:app --host 0.0.0.0 --port 8000
 ```
 
 Then open `http://localhost:8000`.
 
 On a server, the included systemd and nginx configs are in `deploy/`.
+
+Web access is protected by `PROFITMAP_USERNAME`, `PROFITMAP_PASSWORD`, and `PROFITMAP_SECRET_KEY` from `.env`. Failed logins are locked by IP after several attempts, and nginx additionally rate-limits `/login`.
 
 On macOS/Linux:
 

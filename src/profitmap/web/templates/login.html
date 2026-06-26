@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Вход в ProfitMap</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <section class="login-card">
+        <div class="brand">ProfitMap</div>
+        <h1>Вход</h1>
+        <p>Доступ только по логину и паролю владельца.</p>
+        {% if error %}
+          <div class="auth-error">
+            {{ error }}
+            {% if locked_for %}
+              <span>Осталось: {{ locked_for }} сек.</span>
+            {% endif %}
+          </div>
+        {% endif %}
+        <form method="post" action="/login" class="login-form">
+          <label>
+            Логин
+            <input name="username" autocomplete="username" required autofocus />
+          </label>
+          <label>
+            Пароль
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Войти</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>
