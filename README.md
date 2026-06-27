@@ -46,6 +46,7 @@ Then open `http://localhost:8000`.
 On a server, the included systemd and nginx configs are in `deploy/`.
 
 Web access is protected by `PROFITMAP_USERNAME`, `PROFITMAP_PASSWORD`, and `PROFITMAP_SECRET_KEY` from `.env`. Failed logins are locked by IP after several attempts, and nginx additionally rate-limits `/login`.
+Set `PROFITMAP_COOKIE_SECURE=1` only when the site is served through HTTPS.
 
 On macOS/Linux:
 
