@@ -40,6 +40,7 @@
                 <tr>
                   <th>SKU</th>
                   <th>Название</th>
+                  <th>Класс</th>
                   <th>Категория</th>
                   <th>Остаток</th>
                   <th>Продажа</th>
@@ -77,6 +78,36 @@
                 <div class="pricing" id="pricing"></div>
               </div>
             </div>
+            <section class="supplies-panel">
+              <div class="section-head">
+                <div>
+                  <h2>Поставки</h2>
+                  <p id="supplySummary">Средняя закупочная цена рассчитывается по всем поставкам.</p>
+                </div>
+              </div>
+              <form id="supplyForm" class="supply-form">
+                <input type="date" name="supply_date" required />
+                <input name="quantity" type="number" min="1" step="1" placeholder="Количество" required />
+                <input name="unit_purchase_price" type="number" min="0" step="0.01" placeholder="Цена закупки" required />
+                <input name="supplier_name" placeholder="Поставщик" />
+                <input name="comment" placeholder="Комментарий" />
+                <button type="submit">Добавить поставку</button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Количество</th>
+                    <th>Цена</th>
+                    <th>Сумма</th>
+                    <th>Поставщик</th>
+                    <th>Комментарий</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="suppliesTable"></tbody>
+              </table>
+            </section>
           </section>
         </div>
       </section>

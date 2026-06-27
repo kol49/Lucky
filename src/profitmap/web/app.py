@@ -19,12 +19,13 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from profitmap.db.models import FixedExpense, Product, SaleRecord
+from profitmap.db.models import FixedExpense, Product, ProductSupply, SaleRecord
 from profitmap.db.session import init_database
 from profitmap.services.ai_consultant import analyze_business
 from profitmap.services.allocation import allocate_fixed_expenses
 from profitmap.services.coefficients import build_profit_coefficients
 from profitmap.services.demand import forecast_demand
+from profitmap.services.inventory import calculate_supply_summary, refresh_product_from_supplies
 from profitmap.services.unit_economics import UnitEconomicsInput, calculate_unit_economics
 
 load_dotenv()
@@ -51,6 +52,7 @@ class ProductPayload(BaseModel):
     sku: str = ""
     name: str = "Новый товар"
     category: str = ""
+    product_class: str = ""
     subcategory: str = ""
     brand: str = ""
     stock: int = 0
@@ -79,6 +81,14 @@ class ExpensePayload(BaseModel):
     category: str
     amount: float
     reason: str = ""
+    comment: str = ""
+
+
+class SupplyPayload(BaseModel):
+    supply_date: date
+    quantity: int
+    unit_purchase_price: float
+    supplier_name: str = ""
     comment: str = ""
 
 
@@ -198,6 +208,7 @@ def update_product(product_id: int, payload: ProductPayload) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="Product not found")
         for key, value in payload.model_dump().items():
             setattr(product, key, value)
+        refresh_product_from_supplies(session, product)
         session.commit()
         return _product_detail(product)
 
@@ -211,6 +222,47 @@ def delete_product(product_id: int) -> dict[str, str]:
         session.delete(product)
         session.commit()
         return {"status": "deleted"}
+
+
+@app.post("/api/products/{product_id}/supplies")
+def create_supply(product_id: int, payload: SupplyPayload) -> dict[str, Any]:
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if payload.unit_purchase_price < 0:
+        raise HTTPException(status_code=400, detail="Purchase price cannot be negative")
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        supply = ProductSupply(
+            product_id=product.id,
+            supply_date=payload.supply_date,
+            quantity=payload.quantity,
+            unit_purchase_price=payload.unit_purchase_price,
+            supplier_name=payload.supplier_name or product.supplier_name,
+            comment=payload.comment,
+        )
+        session.add(supply)
+        session.flush()
+        refresh_product_from_supplies(session, product)
+        session.commit()
+        return _product_detail(product)
+
+
+@app.delete("/api/products/{product_id}/supplies/{supply_id}")
+def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        supply = session.get(ProductSupply, supply_id)
+        if not supply or supply.product_id != product.id:
+            raise HTTPException(status_code=404, detail="Supply not found")
+        session.delete(supply)
+        session.flush()
+        refresh_product_from_supplies(session, product)
+        session.commit()
+        return _product_detail(product)
 
 
 @app.get("/api/expenses")
@@ -282,6 +334,7 @@ def _product_summary(product: Product) -> dict[str, Any]:
         "sku": product.sku,
         "name": product.name,
         "category": product.category,
+        "product_class": product.product_class,
         "stock": product.stock,
         "purchase_price": product.purchase_price,
         "sale_price": product.sale_price,
@@ -295,6 +348,8 @@ def _product_summary(product: Product) -> dict[str, Any]:
 def _product_detail(product: Product) -> dict[str, Any]:
     payload = _product_summary(product)
     economics = _economics(product)
+    supplies = sorted(product.supplies, key=lambda supply: (supply.supply_date, supply.id), reverse=True)
+    supply_summary = calculate_supply_summary(product, supplies)
     payload.update(
         {
             "subcategory": product.subcategory,
@@ -315,6 +370,8 @@ def _product_detail(product: Product) -> dict[str, Any]:
             "lead_time_days": product.lead_time_days,
             "minimum_order_quantity": product.minimum_order_quantity,
             "economics": asdict(economics),
+            "supply_summary": asdict(supply_summary),
+            "supplies": [_supply_dict(supply) for supply in supplies],
         }
     )
     return payload
@@ -346,6 +403,18 @@ def _expense_dict(expense: FixedExpense) -> dict[str, Any]:
         "amount": expense.amount,
         "reason": expense.reason,
         "comment": expense.comment,
+    }
+
+
+def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
+    return {
+        "id": supply.id,
+        "supply_date": supply.supply_date.isoformat(),
+        "quantity": supply.quantity,
+        "unit_purchase_price": supply.unit_purchase_price,
+        "total_cost": round(supply.quantity * supply.unit_purchase_price, 2),
+        "supplier_name": supply.supplier_name,
+        "comment": supply.comment,
     }
 
 

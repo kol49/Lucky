@@ -6,11 +6,12 @@ const fields = [
   ["name", "Название", "text"],
   ["sku", "Артикул", "text"],
   ["category", "Категория", "text"],
+  ["product_class", "Класс товара", "text"],
   ["subcategory", "Подкатегория", "text"],
   ["brand", "Бренд", "text"],
   ["stock", "Остаток", "number"],
   ["expected_monthly_sales", "Продажи/мес.", "number"],
-  ["purchase_price", "Закупочная цена", "number"],
+  ["purchase_price", "Средняя закупочная", "number"],
   ["sale_price", "Цена продажи", "number"],
   ["logistics", "Логистика", "number"],
   ["marketplace_fee", "Комиссия", "number"],
@@ -62,7 +63,9 @@ function bindActions() {
   document.getElementById("runAi").addEventListener("click", runAi);
   document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
+  document.getElementById("supplyForm").addEventListener("submit", addSupply);
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
+  document.querySelector("[name='supply_date']").valueAsDate = new Date();
 }
 
 async function loadState(preferredProductId = null) {
@@ -90,6 +93,7 @@ function renderProducts() {
         <tr class="${selectedProduct && selectedProduct.id === product.id ? "selected" : ""}" data-id="${product.id}">
           <td>${escapeHtml(product.sku)}</td>
           <td>${escapeHtml(product.name)}</td>
+          <td>${escapeHtml(product.product_class || "")}</td>
           <td>${escapeHtml(product.category || "")}</td>
           <td class="numeric">${product.stock}</td>
           <td class="numeric">${money.format(product.sale_price)}</td>
@@ -98,10 +102,11 @@ function renderProducts() {
           <td class="numeric">${product.roi_percent.toFixed(1)}%</td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="8" class="empty">Товаров пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="9" class="empty">Товаров пока нет</td></tr>`;
 
   document.querySelectorAll("#productsTable tr").forEach((row) => {
     row.addEventListener("click", async () => {
+      if (!row.dataset.id) return;
       selectedProduct = await fetchJson(`/api/products/${row.dataset.id}`);
       renderProducts();
       renderSelectedProduct();
@@ -115,6 +120,8 @@ function renderSelectedProduct() {
     document.getElementById("productForm").innerHTML = `<div class="empty-form">Добавьте товар, чтобы рассчитать юнит-экономику и построить график.</div>`;
     document.getElementById("productMetrics").innerHTML = "";
     document.getElementById("pricing").innerHTML = "";
+    document.getElementById("supplySummary").textContent = "Добавьте товар, чтобы учитывать поставки.";
+    document.getElementById("suppliesTable").innerHTML = `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
     Plotly.purge("breakEvenChart");
     return;
   }
@@ -124,11 +131,13 @@ function renderSelectedProduct() {
     .map(([name, label, type]) => {
       const value = selectedProduct[name] ?? "";
       const step = type === "number" ? ' step="0.01"' : "";
-      return `<div class="field"><label>${label}</label><input name="${name}" type="${type}"${step} value="${escapeAttribute(value)}" /></div>`;
+      const readonly = name === "purchase_price" ? " readonly" : "";
+      return `<div class="field"><label>${label}</label><input name="${name}" type="${type}"${step}${readonly} value="${escapeAttribute(value)}" /></div>`;
     })
     .join("");
   form.querySelectorAll("input").forEach((input) => input.addEventListener("input", handleLiveRecalculate));
   renderProductEconomics(selectedProduct);
+  renderSupplies();
   renderChart(selectedProduct);
 }
 
@@ -202,6 +211,33 @@ function renderProductEconomics(product) {
   ]
     .map(metric)
     .join("");
+}
+
+function renderSupplies() {
+  if (!selectedProduct) return;
+  const summary = selectedProduct.supply_summary || {};
+  document.getElementById("supplySummary").textContent =
+    `Всего поставлено: ${summary.total_quantity || 0} шт. · Средняя закупка: ${money.format(summary.average_purchase_price || selectedProduct.purchase_price || 0)} · Рекомендуемая цена: ${money.format(summary.recommended_price || 0)}`;
+
+  const supplies = selectedProduct.supplies || [];
+  document.getElementById("suppliesTable").innerHTML = supplies.length ? supplies
+    .map(
+      (supply) => `
+        <tr>
+          <td>${supply.supply_date}</td>
+          <td class="numeric">${supply.quantity}</td>
+          <td class="numeric">${money.format(supply.unit_purchase_price)}</td>
+          <td class="numeric">${money.format(supply.total_cost)}</td>
+          <td>${escapeHtml(supply.supplier_name || "")}</td>
+          <td>${escapeHtml(supply.comment || "")}</td>
+          <td class="action-cell"><button class="danger icon-button" data-supply-id="${supply.id}" title="Удалить поставку">Удалить</button></td>
+        </tr>`,
+    )
+    .join("") : `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-supply-id]").forEach((button) => {
+    button.addEventListener("click", deleteSupply);
+  });
 }
 
 function renderChart(product) {
@@ -297,6 +333,31 @@ async function createProduct() {
     method: "POST",
     body: JSON.stringify({ name: "Новый товар", sku: "", category: "Без категории", expected_monthly_sales: 100 }),
   });
+  await loadState(selectedProduct.id);
+}
+
+async function addSupply(event) {
+  event.preventDefault();
+  if (!selectedProduct) return;
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.quantity = Number(payload.quantity || 0);
+  payload.unit_purchase_price = Number(payload.unit_purchase_price || 0);
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/supplies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  form.reset();
+  form.querySelector("[name='supply_date']").valueAsDate = new Date();
+  await loadState(selectedProduct.id);
+}
+
+async function deleteSupply(event) {
+  if (!selectedProduct) return;
+  const supplyId = event.currentTarget.dataset.supplyId;
+  const confirmed = window.confirm("Удалить эту поставку? Средняя закупочная цена и остаток товара будут пересчитаны.");
+  if (!confirmed) return;
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/supplies/${supplyId}`, { method: "DELETE" });
   await loadState(selectedProduct.id);
 }
 

@@ -3,24 +3,37 @@ from __future__ import annotations
 from datetime import date, timedelta
 from pathlib import Path
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from profitmap.db.models import Base, FixedExpense, Product, SaleRecord
+from profitmap.db.models import Base, FixedExpense, Product, ProductSupply, SaleRecord
 
 
 def init_database(db_path: Path) -> sessionmaker[Session]:
     engine = create_engine(f"sqlite:///{db_path}", future=True)
     Base.metadata.create_all(engine)
+    migrate_database(engine)
     factory = sessionmaker(engine, expire_on_commit=False, future=True)
     seed_database(factory)
     return factory
+
+
+def migrate_database(engine) -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "products" in table_names:
+        product_columns = {column["name"] for column in inspector.get_columns("products")}
+        with engine.begin() as connection:
+            if "product_class" not in product_columns:
+                connection.execute(text("ALTER TABLE products ADD COLUMN product_class VARCHAR(120) DEFAULT ''"))
+    Base.metadata.create_all(engine)
 
 
 def seed_database(factory: sessionmaker[Session]) -> None:
     with factory() as session:
         has_products = session.scalar(select(Product.id).limit(1))
         if has_products:
+            ensure_initial_supplies(session)
             return
 
         products = [
@@ -28,6 +41,7 @@ def seed_database(factory: sessionmaker[Session]) -> None:
                 sku="PM-001",
                 name="Premium Coffee Beans 1kg",
                 category="Food",
+                product_class="A",
                 subcategory="Coffee",
                 brand="RoastLab",
                 stock=320,
@@ -54,6 +68,7 @@ def seed_database(factory: sessionmaker[Session]) -> None:
                 sku="PM-002",
                 name="Reusable Water Bottle",
                 category="Home",
+                product_class="B",
                 subcategory="Kitchen",
                 brand="ClearFlow",
                 stock=180,
@@ -77,6 +92,7 @@ def seed_database(factory: sessionmaker[Session]) -> None:
                 sku="PM-003",
                 name="LED Desk Lamp",
                 category="Electronics",
+                product_class="C",
                 subcategory="Lighting",
                 brand="BrightDesk",
                 stock=74,
@@ -99,6 +115,18 @@ def seed_database(factory: sessionmaker[Session]) -> None:
         ]
         session.add_all(products)
         session.flush()
+
+        for product in products:
+            session.add(
+                ProductSupply(
+                    product_id=product.id,
+                    supply_date=date.today(),
+                    quantity=product.stock,
+                    unit_purchase_price=product.purchase_price,
+                    supplier_name=product.supplier_name,
+                    comment="Initial inventory",
+                )
+            )
 
         expenses = [
             FixedExpense(expense_date=date.today(), category="Rent", amount=1800, reason="Office and storage"),
@@ -123,3 +151,22 @@ def seed_database(factory: sessionmaker[Session]) -> None:
                 )
 
         session.commit()
+
+
+def ensure_initial_supplies(session: Session) -> None:
+    has_supplies = session.scalar(select(ProductSupply.id).limit(1))
+    if has_supplies:
+        return
+    products = list(session.scalars(select(Product)))
+    for product in products:
+        session.add(
+            ProductSupply(
+                product_id=product.id,
+                supply_date=date.today(),
+                quantity=max(product.stock, 0),
+                unit_purchase_price=product.purchase_price,
+                supplier_name=product.supplier_name,
+                comment="Initial inventory",
+            )
+        )
+    session.commit()

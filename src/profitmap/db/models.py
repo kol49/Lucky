@@ -17,6 +17,7 @@ class Product(Base):
     sku: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), index=True)
     category: Mapped[str] = mapped_column(String(120), default="")
+    product_class: Mapped[str] = mapped_column(String(120), default="")
     subcategory: Mapped[str] = mapped_column(String(120), default="")
     brand: Mapped[str] = mapped_column(String(120), default="")
     stock: Mapped[int] = mapped_column(Integer, default=0)
@@ -46,6 +47,22 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     sales: Mapped[list["SaleRecord"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    supplies: Mapped[list["ProductSupply"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+
+
+class ProductSupply(Base):
+    __tablename__ = "product_supplies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    supply_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
+    unit_purchase_price: Mapped[float] = mapped_column(Float, default=0.0)
+    supplier_name: Mapped[str] = mapped_column(String(255), default="")
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product: Mapped[Product] = relationship(back_populates="supplies")
 
 
 class FixedExpense(Base):

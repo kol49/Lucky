@@ -377,11 +377,29 @@ tbody tr.selected {
   width: 100%;
 }
 
-.expense-form {
+.expense-form,
+.supply-form {
   align-items: stretch;
   display: grid;
   grid-template-columns: 150px 170px 130px 1fr 1fr 120px;
   margin-bottom: 14px;
+}
+
+.supply-form {
+  grid-template-columns: 150px 130px 150px minmax(150px, 1fr) minmax(180px, 1fr) 170px;
+}
+
+.supplies-panel {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.section-head {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 pre {
@@ -468,7 +486,8 @@ pre {
     width: 100%;
   }
 
-  .expense-form {
+  .expense-form,
+  .supply-form {
     grid-template-columns: 1fr;
   }
 
