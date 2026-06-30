@@ -108,6 +108,35 @@
                 <tbody id="suppliesTable"></tbody>
               </table>
             </section>
+            <section class="sales-panel">
+              <div class="section-head">
+                <div>
+                  <h2>Продажи</h2>
+                  <p id="salesSummary">Фактическая цена продажи учитывает скидки и акции.</p>
+                </div>
+              </div>
+              <form id="saleForm" class="sale-form">
+                <input type="date" name="sale_date" required />
+                <input name="quantity" type="number" min="1" step="1" placeholder="Количество" required />
+                <input name="unit_price" type="number" min="0" step="0.01" placeholder="Цена продажи" required />
+                <input name="comment" placeholder="Комментарий / скидка" />
+                <button type="submit">Добавить продажу</button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Количество</th>
+                    <th>Цена</th>
+                    <th>Выручка</th>
+                    <th>Скидка</th>
+                    <th>Комментарий</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="salesTable"></tbody>
+              </table>
+            </section>
           </section>
         </div>
       </section>

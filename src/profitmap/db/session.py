@@ -26,6 +26,11 @@ def migrate_database(engine) -> None:
         with engine.begin() as connection:
             if "product_class" not in product_columns:
                 connection.execute(text("ALTER TABLE products ADD COLUMN product_class VARCHAR(120) DEFAULT ''"))
+    if "sales" in table_names:
+        sales_columns = {column["name"] for column in inspector.get_columns("sales")}
+        with engine.begin() as connection:
+            if "comment" not in sales_columns:
+                connection.execute(text("ALTER TABLE sales ADD COLUMN comment TEXT DEFAULT ''"))
     Base.metadata.create_all(engine)
 
 

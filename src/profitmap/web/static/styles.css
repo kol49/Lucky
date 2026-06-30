@@ -378,7 +378,8 @@ tbody tr.selected {
 }
 
 .expense-form,
-.supply-form {
+.supply-form,
+.sale-form {
   align-items: stretch;
   display: grid;
   grid-template-columns: 150px 170px 130px 1fr 1fr 120px;
@@ -389,7 +390,12 @@ tbody tr.selected {
   grid-template-columns: 150px 130px 150px minmax(150px, 1fr) minmax(180px, 1fr) 170px;
 }
 
-.supplies-panel {
+.sale-form {
+  grid-template-columns: 150px 130px 150px minmax(220px, 1fr) 160px;
+}
+
+.supplies-panel,
+.sales-panel {
   border-top: 1px solid var(--line);
   margin-top: 16px;
   padding-top: 14px;
@@ -487,7 +493,8 @@ pre {
   }
 
   .expense-form,
-  .supply-form {
+  .supply-form,
+  .sale-form {
     grid-template-columns: 1fr;
   }
 

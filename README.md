@@ -4,6 +4,7 @@ ProfitMap is a Windows desktop application for product-level profitability analy
 
 The web version supports creating, editing, and deleting products and fixed expenses from the browser.
 Products can also store supply batches with different quantities and purchase prices. ProfitMap calculates the weighted average purchase price and updates the recommended sale price automatically.
+Product cards also support sale records with actual quantity and sale price, so discounted sales are reflected in average sale price, revenue, and analytics.
 
 The analytics dashboard also includes profitability coefficients in report format:
 

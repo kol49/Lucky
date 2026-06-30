@@ -86,6 +86,7 @@ class SaleRecord(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=0)
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)
     revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    comment: Mapped[str] = mapped_column(Text, default="")
 
     product: Mapped[Product] = relationship(back_populates="sales")
 

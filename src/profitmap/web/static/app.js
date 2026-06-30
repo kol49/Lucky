@@ -64,8 +64,10 @@ function bindActions() {
   document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
+  document.getElementById("saleForm").addEventListener("submit", addSale);
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
   document.querySelector("[name='supply_date']").valueAsDate = new Date();
+  document.querySelector("[name='sale_date']").valueAsDate = new Date();
 }
 
 async function loadState(preferredProductId = null) {
@@ -122,6 +124,8 @@ function renderSelectedProduct() {
     document.getElementById("pricing").innerHTML = "";
     document.getElementById("supplySummary").textContent = "Добавьте товар, чтобы учитывать поставки.";
     document.getElementById("suppliesTable").innerHTML = `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
+    document.getElementById("salesSummary").textContent = "Добавьте товар, чтобы учитывать продажи.";
+    document.getElementById("salesTable").innerHTML = `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
     Plotly.purge("breakEvenChart");
     return;
   }
@@ -138,6 +142,7 @@ function renderSelectedProduct() {
   form.querySelectorAll("input").forEach((input) => input.addEventListener("input", handleLiveRecalculate));
   renderProductEconomics(selectedProduct);
   renderSupplies();
+  renderSales();
   renderChart(selectedProduct);
 }
 
@@ -237,6 +242,33 @@ function renderSupplies() {
 
   document.querySelectorAll("[data-supply-id]").forEach((button) => {
     button.addEventListener("click", deleteSupply);
+  });
+}
+
+function renderSales() {
+  if (!selectedProduct) return;
+  const summary = selectedProduct.sales_summary || {};
+  document.getElementById("salesSummary").textContent =
+    `Продано: ${summary.total_quantity || 0} шт. · Средняя цена: ${money.format(summary.average_sale_price || selectedProduct.sale_price || 0)} · Скидка от базовой цены: ${Number(summary.discount_percent || 0).toFixed(1)}% · Выручка: ${money.format(summary.total_revenue || 0)}`;
+
+  const sales = selectedProduct.sales || [];
+  document.getElementById("salesTable").innerHTML = sales.length ? sales
+    .map(
+      (sale) => `
+        <tr>
+          <td>${sale.sale_date}</td>
+          <td class="numeric">${sale.quantity}</td>
+          <td class="numeric">${money.format(sale.unit_price)}</td>
+          <td class="numeric">${money.format(sale.revenue)}</td>
+          <td class="numeric">${Number(sale.discount_percent || 0).toFixed(1)}%</td>
+          <td>${escapeHtml(sale.comment || "")}</td>
+          <td class="action-cell"><button class="danger icon-button" data-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
+        </tr>`,
+    )
+    .join("") : `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-sale-id]").forEach((button) => {
+    button.addEventListener("click", deleteSale);
   });
 }
 
@@ -358,6 +390,31 @@ async function deleteSupply(event) {
   const confirmed = window.confirm("Удалить эту поставку? Средняя закупочная цена и остаток товара будут пересчитаны.");
   if (!confirmed) return;
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/supplies/${supplyId}`, { method: "DELETE" });
+  await loadState(selectedProduct.id);
+}
+
+async function addSale(event) {
+  event.preventDefault();
+  if (!selectedProduct) return;
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.quantity = Number(payload.quantity || 0);
+  payload.unit_price = Number(payload.unit_price || 0);
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/sales`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  form.reset();
+  form.querySelector("[name='sale_date']").valueAsDate = new Date();
+  await loadState(selectedProduct.id);
+}
+
+async function deleteSale(event) {
+  if (!selectedProduct) return;
+  const saleId = event.currentTarget.dataset.saleId;
+  const confirmed = window.confirm("Удалить эту продажу?");
+  if (!confirmed) return;
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/sales/${saleId}`, { method: "DELETE" });
   await loadState(selectedProduct.id);
 }
 

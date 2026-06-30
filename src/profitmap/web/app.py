@@ -26,6 +26,7 @@ from profitmap.services.allocation import allocate_fixed_expenses
 from profitmap.services.coefficients import build_profit_coefficients
 from profitmap.services.demand import forecast_demand
 from profitmap.services.inventory import calculate_supply_summary, refresh_product_from_supplies
+from profitmap.services.sales import calculate_sales_summary
 from profitmap.services.unit_economics import UnitEconomicsInput, calculate_unit_economics
 
 load_dotenv()
@@ -89,6 +90,13 @@ class SupplyPayload(BaseModel):
     quantity: int
     unit_purchase_price: float
     supplier_name: str = ""
+    comment: str = ""
+
+
+class SalePayload(BaseModel):
+    sale_date: date
+    quantity: int
+    unit_price: float
     comment: str = ""
 
 
@@ -265,6 +273,43 @@ def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
         return _product_detail(product)
 
 
+@app.post("/api/products/{product_id}/sales")
+def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if payload.unit_price < 0:
+        raise HTTPException(status_code=400, detail="Sale price cannot be negative")
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        sale = SaleRecord(
+            product_id=product.id,
+            sale_date=payload.sale_date,
+            quantity=payload.quantity,
+            unit_price=payload.unit_price,
+            revenue=round(payload.quantity * payload.unit_price, 2),
+            comment=payload.comment,
+        )
+        session.add(sale)
+        session.commit()
+        return _product_detail(product)
+
+
+@app.delete("/api/products/{product_id}/sales/{sale_id}")
+def delete_sale(product_id: int, sale_id: int) -> dict[str, Any]:
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        sale = session.get(SaleRecord, sale_id)
+        if not sale or sale.product_id != product.id:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        session.delete(sale)
+        session.commit()
+        return _product_detail(product)
+
+
 @app.get("/api/expenses")
 def get_expenses() -> list[dict[str, Any]]:
     with SessionFactory() as session:
@@ -349,7 +394,9 @@ def _product_detail(product: Product) -> dict[str, Any]:
     payload = _product_summary(product)
     economics = _economics(product)
     supplies = sorted(product.supplies, key=lambda supply: (supply.supply_date, supply.id), reverse=True)
+    sales = sorted(product.sales, key=lambda sale: (sale.sale_date, sale.id), reverse=True)
     supply_summary = calculate_supply_summary(product, supplies)
+    sales_summary = calculate_sales_summary(product, sales)
     payload.update(
         {
             "subcategory": product.subcategory,
@@ -372,6 +419,8 @@ def _product_detail(product: Product) -> dict[str, Any]:
             "economics": asdict(economics),
             "supply_summary": asdict(supply_summary),
             "supplies": [_supply_dict(supply) for supply in supplies],
+            "sales_summary": asdict(sales_summary),
+            "sales": [_sale_dict(sale, product.sale_price) for sale in sales],
         }
     )
     return payload
@@ -418,6 +467,21 @@ def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
     }
 
 
+def _sale_dict(sale: SaleRecord, base_sale_price: float) -> dict[str, Any]:
+    discount_percent = 0.0
+    if base_sale_price:
+        discount_percent = max((base_sale_price - sale.unit_price) / base_sale_price * 100, 0)
+    return {
+        "id": sale.id,
+        "sale_date": sale.sale_date.isoformat(),
+        "quantity": sale.quantity,
+        "unit_price": sale.unit_price,
+        "revenue": sale.revenue,
+        "discount_percent": round(discount_percent, 1),
+        "comment": sale.comment,
+    }
+
+
 def _analytics(session, products: list[Product]) -> dict[str, Any]:
     total_revenue = float(session.scalar(select(func.coalesce(func.sum(SaleRecord.revenue), 0))) or 0)
     total_fixed = float(session.scalar(select(func.coalesce(func.sum(FixedExpense.amount), 0))) or 0)
@@ -425,8 +489,15 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
     total_profit = 0.0
     for product in products:
         economics = _economics(product)
-        revenue = product.sale_price * product.expected_monthly_sales
-        profit = economics.net_profit_per_unit * product.expected_monthly_sales
+        sales = list(product.sales)
+        if sales:
+            revenue = sum(sale.revenue for sale in sales)
+            quantity = sum(sale.quantity for sale in sales)
+            profit = sum((sale.unit_price - economics.full_cost_per_unit) * sale.quantity for sale in sales)
+        else:
+            revenue = product.sale_price * product.expected_monthly_sales
+            quantity = product.expected_monthly_sales
+            profit = economics.net_profit_per_unit * product.expected_monthly_sales
         total_profit += profit
         quantities = list(
             session.scalars(
@@ -439,6 +510,7 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
                 "product": product.name,
                 "revenue": revenue,
                 "profit": profit,
+                "quantity": quantity,
                 "forecast_30_days": forecast.forecast_units,
             }
         )
