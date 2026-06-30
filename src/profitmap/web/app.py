@@ -271,9 +271,10 @@ def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
         supply = session.get(ProductSupply, supply_id)
         if not supply or supply.product_id != product.id:
             raise HTTPException(status_code=404, detail="Supply not found")
+        quantity = supply.quantity
         session.delete(supply)
         session.flush()
-        refresh_product_from_supplies(session, product)
+        refresh_product_from_supplies(session, product, fallback_stock_delta=-quantity)
         session.commit()
         return _product_detail(product)
 
@@ -297,6 +298,8 @@ def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
             comment=payload.comment,
         )
         session.add(sale)
+        session.flush()
+        refresh_product_from_supplies(session, product, fallback_stock_delta=-payload.quantity)
         session.commit()
         return _product_detail(product)
 
@@ -326,6 +329,8 @@ def create_global_sale(payload: GlobalSalePayload) -> dict[str, Any]:
             comment=payload.comment,
         )
         session.add(sale)
+        session.flush()
+        refresh_product_from_supplies(session, product, fallback_stock_delta=-payload.quantity)
         session.commit()
         return _sale_with_product_dict(sale, product)
 
@@ -336,7 +341,11 @@ def delete_global_sale(sale_id: int) -> dict[str, str]:
         sale = session.get(SaleRecord, sale_id)
         if not sale:
             raise HTTPException(status_code=404, detail="Sale not found")
+        product = sale.product
+        quantity = sale.quantity
         session.delete(sale)
+        session.flush()
+        refresh_product_from_supplies(session, product, fallback_stock_delta=quantity)
         session.commit()
         return {"status": "deleted"}
 
@@ -350,7 +359,10 @@ def delete_sale(product_id: int, sale_id: int) -> dict[str, Any]:
         sale = session.get(SaleRecord, sale_id)
         if not sale or sale.product_id != product.id:
             raise HTTPException(status_code=404, detail="Sale not found")
+        quantity = sale.quantity
         session.delete(sale)
+        session.flush()
+        refresh_product_from_supplies(session, product, fallback_stock_delta=quantity)
         session.commit()
         return _product_detail(product)
 

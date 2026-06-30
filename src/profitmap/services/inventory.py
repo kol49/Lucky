@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from profitmap.db.models import Product, ProductSupply
+from profitmap.db.models import Product, ProductSupply, SaleRecord
 from profitmap.services.unit_economics import UnitEconomicsInput, calculate_unit_economics
 
 
@@ -52,15 +52,23 @@ def calculate_supply_summary(product: Product, supplies: list[ProductSupply] | N
     )
 
 
-def refresh_product_from_supplies(session: Session, product: Product) -> SupplySummary:
+def refresh_product_from_supplies(session: Session, product: Product, fallback_stock_delta: int = 0) -> SupplySummary:
     supplies = list(
         session.scalars(
             select(ProductSupply).where(ProductSupply.product_id == product.id).order_by(ProductSupply.supply_date)
         )
     )
     summary = calculate_supply_summary(product, supplies)
-    product.stock = summary.total_quantity
     if supplies:
+        sold_quantity = int(
+            session.scalar(
+                select(func.coalesce(func.sum(SaleRecord.quantity), 0)).where(SaleRecord.product_id == product.id)
+            )
+            or 0
+        )
+        product.stock = max(summary.total_quantity - sold_quantity, 0)
         product.purchase_price = summary.average_purchase_price
+    elif fallback_stock_delta:
+        product.stock = max(product.stock + fallback_stock_delta, 0)
     session.flush()
     return summary
