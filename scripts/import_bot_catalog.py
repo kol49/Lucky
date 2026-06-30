@@ -27,6 +27,7 @@ def main() -> int:
     parser.add_argument("catalogs", nargs="+", type=Path)
     parser.add_argument("--db", type=Path, default=Path(os.getenv("PROFITMAP_DB", Path.home() / "profitmap_web.sqlite3")))
     parser.add_argument("--delete-excel", action="store_true")
+    parser.add_argument("--delete-sales", action="store_true")
     args = parser.parse_args()
 
     factory = init_database(args.db)
@@ -35,6 +36,8 @@ def main() -> int:
         result: dict[str, int] = {}
         if args.delete_excel:
             result.update(delete_excel_import(session))
+        if args.delete_sales:
+            result.update(delete_sales(session))
         result.update(import_products(session, products))
         session.commit()
     print(result)
@@ -45,7 +48,7 @@ def load_products(paths: list[Path]) -> list[dict[str, Any]]:
     products: list[dict[str, Any]] = []
     seen_articles: set[str] = set()
     for path in paths:
-        source = path.parent.name
+        source = source_name(path)
         with path.open(encoding="utf-8") as handle:
             catalog = json.load(handle)
         for item in catalog:
@@ -85,6 +88,14 @@ def delete_excel_import(session) -> dict[str, int]:
         session.delete(item)
     session.flush()
     return counts
+
+
+def delete_sales(session) -> dict[str, int]:
+    sales = list(session.scalars(select(SaleRecord)))
+    for sale in sales:
+        session.delete(sale)
+    session.flush()
+    return {"sales_deleted": len(sales)}
 
 
 def import_products(session, products: list[dict[str, Any]]) -> dict[str, int]:
@@ -155,6 +166,15 @@ def clean_text(value: Any) -> str:
     if value is None:
         return ""
     return " ".join(str(value).strip().split())
+
+
+def source_name(path: Path) -> str:
+    name = path.name
+    if name.endswith(".catalog.json"):
+        return name[: -len(".catalog.json")]
+    if name == "catalog.json":
+        return path.parent.name
+    return path.stem
 
 
 def number(value: Any) -> float:
