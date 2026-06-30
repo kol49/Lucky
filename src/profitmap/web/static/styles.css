@@ -394,6 +394,41 @@ tbody tr.selected {
   grid-template-columns: 150px 130px 150px minmax(220px, 1fr) 160px;
 }
 
+.sales-page-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+.quick-sale-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.4fr) 150px 120px 150px minmax(180px, 1fr) 160px;
+}
+
+.quick-sale-form label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.quick-sale-form button {
+  align-self: end;
+}
+
+.quick-sale-form input,
+.quick-sale-form select {
+  width: 100%;
+}
+
+.sales-page-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+
 .supplies-panel,
 .sales-panel {
   border-top: 1px solid var(--line);
@@ -456,8 +491,14 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .sales-page-grid,
+  .quick-sale-form {
+    grid-template-columns: 1fr;
+  }
+
   .metrics,
-  .pricing {
+  .pricing,
+  .sales-page-summary {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 
@@ -494,7 +535,8 @@ pre {
 
   .expense-form,
   .supply-form,
-  .sale-form {
+  .sale-form,
+  .quick-sale-form {
     grid-template-columns: 1fr;
   }
 

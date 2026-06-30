@@ -100,6 +100,10 @@ class SalePayload(BaseModel):
     comment: str = ""
 
 
+class GlobalSalePayload(SalePayload):
+    product_id: int
+
+
 class AllocationPayload(BaseModel):
     method: str
 
@@ -182,6 +186,7 @@ def state() -> dict[str, Any]:
         return {
             "products": [_product_summary(product) for product in products],
             "selectedProduct": _product_detail(products[0]) if products else None,
+            "sales": _all_sales(session),
             "expenses": [_expense_dict(expense) for expense in expenses],
             "analytics": _analytics(session, products),
         }
@@ -294,6 +299,46 @@ def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
         session.add(sale)
         session.commit()
         return _product_detail(product)
+
+
+@app.get("/api/sales")
+def get_sales() -> list[dict[str, Any]]:
+    with SessionFactory() as session:
+        return _all_sales(session)
+
+
+@app.post("/api/sales")
+def create_global_sale(payload: GlobalSalePayload) -> dict[str, Any]:
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if payload.unit_price < 0:
+        raise HTTPException(status_code=400, detail="Sale price cannot be negative")
+    with SessionFactory() as session:
+        product = session.get(Product, payload.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        sale = SaleRecord(
+            product_id=product.id,
+            sale_date=payload.sale_date,
+            quantity=payload.quantity,
+            unit_price=payload.unit_price,
+            revenue=round(payload.quantity * payload.unit_price, 2),
+            comment=payload.comment,
+        )
+        session.add(sale)
+        session.commit()
+        return _sale_with_product_dict(sale, product)
+
+
+@app.delete("/api/sales/{sale_id}")
+def delete_global_sale(sale_id: int) -> dict[str, str]:
+    with SessionFactory() as session:
+        sale = session.get(SaleRecord, sale_id)
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        session.delete(sale)
+        session.commit()
+        return {"status": "deleted"}
 
 
 @app.delete("/api/products/{product_id}/sales/{sale_id}")
@@ -480,6 +525,28 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float) -> dict[str, Any]:
         "discount_percent": round(discount_percent, 1),
         "comment": sale.comment,
     }
+
+
+def _sale_with_product_dict(sale: SaleRecord, product: Product) -> dict[str, Any]:
+    payload = _sale_dict(sale, product.sale_price)
+    payload.update(
+        {
+            "product_id": product.id,
+            "product_name": product.name,
+            "product_sku": product.sku,
+            "base_sale_price": product.sale_price,
+        }
+    )
+    return payload
+
+
+def _all_sales(session) -> list[dict[str, Any]]:
+    rows = session.execute(
+        select(SaleRecord, Product)
+        .join(Product, SaleRecord.product_id == Product.id)
+        .order_by(SaleRecord.sale_date.desc(), SaleRecord.id.desc())
+    )
+    return [_sale_with_product_dict(sale, product) for sale, product in rows]
 
 
 def _analytics(session, products: list[Product]) -> dict[str, Any]:

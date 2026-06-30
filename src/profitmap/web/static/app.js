@@ -43,6 +43,7 @@ function bindNavigation() {
       document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       document.getElementById(button.dataset.view).classList.add("active");
+      if (button.dataset.view === "sales") renderSalesPage();
       if (button.dataset.view === "analytics") renderAnalytics();
     });
   });
@@ -65,9 +66,14 @@ function bindActions() {
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
   document.getElementById("saleForm").addEventListener("submit", addSale);
+  document.getElementById("quickSaleForm").addEventListener("submit", addQuickSale);
+  document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
+  document.getElementById("salesSearch").addEventListener("input", renderSalesPage);
+  document.getElementById("salesProductFilter").addEventListener("change", renderSalesPage);
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
   document.querySelector("[name='supply_date']").valueAsDate = new Date();
-  document.querySelector("[name='sale_date']").valueAsDate = new Date();
+  document.querySelector("#saleForm [name='sale_date']").valueAsDate = new Date();
+  document.querySelector("#quickSaleForm [name='sale_date']").valueAsDate = new Date();
 }
 
 async function loadState(preferredProductId = null) {
@@ -80,6 +86,7 @@ async function loadState(preferredProductId = null) {
   }
   renderProducts();
   renderSelectedProduct();
+  renderSalesPage();
   renderExpenses();
   renderAnalytics();
 }
@@ -272,6 +279,78 @@ function renderSales() {
   });
 }
 
+function renderSalesPage() {
+  const products = state.products || [];
+  const sales = state.sales || [];
+  const quickProduct = document.getElementById("quickSaleProduct");
+  const productFilter = document.getElementById("salesProductFilter");
+  const previousQuickProduct = quickProduct.value || selectedProduct?.id || products[0]?.id || "";
+  const previousFilter = productFilter.value;
+
+  quickProduct.innerHTML = products.length
+    ? products
+      .map((product) => `<option value="${product.id}" data-price="${product.sale_price}">${escapeHtml(product.name)} · ${escapeHtml(product.sku)}</option>`)
+      .join("")
+    : `<option value="">Добавьте товар</option>`;
+  quickProduct.value = products.some((product) => String(product.id) === String(previousQuickProduct))
+    ? String(previousQuickProduct)
+    : String(products[0]?.id || "");
+
+  productFilter.innerHTML = `<option value="">Все товары</option>` + products
+    .map((product) => `<option value="${product.id}">${escapeHtml(product.name)} · ${escapeHtml(product.sku)}</option>`)
+    .join("");
+  productFilter.value = products.some((product) => String(product.id) === String(previousFilter)) ? previousFilter : "";
+
+  const priceInput = document.querySelector("#quickSaleForm [name='unit_price']");
+  if (!priceInput.value) fillQuickSalePrice();
+
+  const query = document.getElementById("salesSearch").value.trim().toLowerCase();
+  const filterProductId = productFilter.value;
+  const filteredSales = sales.filter((sale) => {
+    const matchesProduct = !filterProductId || String(sale.product_id) === String(filterProductId);
+    const haystack = `${sale.sale_date} ${sale.product_name} ${sale.product_sku} ${sale.unit_price} ${sale.comment}`.toLowerCase();
+    return matchesProduct && (!query || haystack.includes(query));
+  });
+
+  const totalQuantity = filteredSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
+  const totalRevenue = filteredSales.reduce((sum, sale) => sum + Number(sale.revenue || 0), 0);
+  const averagePrice = totalQuantity ? totalRevenue / totalQuantity : 0;
+  document.getElementById("salesPageSummary").innerHTML = [
+    ["Продаж", filteredSales.length],
+    ["Количество", `${totalQuantity} шт.`],
+    ["Выручка", money.format(totalRevenue)],
+    ["Средняя цена", money.format(averagePrice)],
+  ].map(metric).join("");
+
+  document.getElementById("salesPageTable").innerHTML = filteredSales.length ? filteredSales
+    .map(
+      (sale) => `
+        <tr>
+          <td>${sale.sale_date}</td>
+          <td>${escapeHtml(sale.product_name)}</td>
+          <td>${escapeHtml(sale.product_sku || "")}</td>
+          <td class="numeric">${sale.quantity}</td>
+          <td class="numeric">${money.format(sale.unit_price)}</td>
+          <td class="numeric">${money.format(sale.revenue)}</td>
+          <td class="numeric">${Number(sale.discount_percent || 0).toFixed(1)}%</td>
+          <td>${escapeHtml(sale.comment || "")}</td>
+          <td class="action-cell"><button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
+        </tr>`,
+    )
+    .join("") : `<tr><td colspan="9" class="empty">Продаж пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-global-sale-id]").forEach((button) => {
+    button.addEventListener("click", deleteGlobalSale);
+  });
+}
+
+function fillQuickSalePrice() {
+  const select = document.getElementById("quickSaleProduct");
+  const option = select.selectedOptions[0];
+  const priceInput = document.querySelector("#quickSaleForm [name='unit_price']");
+  priceInput.value = option?.dataset.price || "";
+}
+
 function renderChart(product) {
   const economics = product.economics || calculateEconomics(product, Number(document.getElementById("targetProfit").value));
   const salePrice = Number(product.sale_price || 0);
@@ -409,6 +488,27 @@ async function addSale(event) {
   await loadState(selectedProduct.id);
 }
 
+async function addQuickSale(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.product_id = Number(payload.product_id || 0);
+  payload.quantity = Number(payload.quantity || 0);
+  payload.unit_price = Number(payload.unit_price || 0);
+  await fetchJson("/api/sales", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  const productId = payload.product_id;
+  form.reset();
+  form.querySelector("[name='sale_date']").valueAsDate = new Date();
+  form.querySelector("[name='quantity']").value = 1;
+  document.getElementById("quickSaleProduct").value = String(productId);
+  fillQuickSalePrice();
+  await loadState(selectedProduct?.id);
+}
+
 async function deleteSale(event) {
   if (!selectedProduct) return;
   const saleId = event.currentTarget.dataset.saleId;
@@ -416,6 +516,14 @@ async function deleteSale(event) {
   if (!confirmed) return;
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/sales/${saleId}`, { method: "DELETE" });
   await loadState(selectedProduct.id);
+}
+
+async function deleteGlobalSale(event) {
+  const saleId = event.currentTarget.dataset.globalSaleId;
+  const confirmed = window.confirm("Удалить эту продажу из журнала?");
+  if (!confirmed) return;
+  await fetchJson(`/api/sales/${saleId}`, { method: "DELETE" });
+  await loadState(selectedProduct?.id);
 }
 
 function renderAnalytics() {

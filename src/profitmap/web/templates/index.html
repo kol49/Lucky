@@ -11,6 +11,7 @@
     <aside class="sidebar">
       <div class="brand">ProfitMap</div>
       <button class="nav active" data-view="products">Товары</button>
+      <button class="nav" data-view="sales">Продажи</button>
       <button class="nav" data-view="analytics">Аналитика</button>
       <button class="nav" data-view="expenses">Расходы</button>
       <button class="nav" data-view="ai">AI-консультант</button>
@@ -139,6 +140,76 @@
             </section>
           </section>
         </div>
+      </section>
+
+      <section class="view" id="sales">
+        <header class="topbar">
+          <div>
+            <h1>Продажи товаров</h1>
+            <p>Быстрый ввод продаж с датой, количеством и фактической ценой продажи.</p>
+          </div>
+          <div class="actions">
+            <input id="salesSearch" placeholder="Поиск по товару, SKU, дате или комментарию" />
+            <select id="salesProductFilter">
+              <option value="">Все товары</option>
+            </select>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="sales-page-grid">
+            <form id="quickSaleForm" class="quick-sale-form">
+              <label>
+                Товар
+                <select name="product_id" id="quickSaleProduct" required></select>
+              </label>
+              <label>
+                Дата продажи
+                <input type="date" name="sale_date" required />
+              </label>
+              <label>
+                Количество
+                <input name="quantity" type="number" min="1" step="1" value="1" required />
+              </label>
+              <label>
+                Цена продажи
+                <input name="unit_price" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Комментарий
+                <input name="comment" placeholder="Скидка, акция, клиент" />
+              </label>
+              <button type="submit">Добавить продажу</button>
+            </form>
+
+            <div class="sales-page-summary" id="salesPageSummary"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Журнал продаж</h2>
+              <p>Здесь видно, когда товар был продан и по какой цене.</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Товар</th>
+                <th>SKU</th>
+                <th>Количество</th>
+                <th>Цена продажи</th>
+                <th>Выручка</th>
+                <th>Скидка</th>
+                <th>Комментарий</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="salesPageTable"></tbody>
+          </table>
+        </section>
       </section>
 
       <section class="view" id="analytics">
