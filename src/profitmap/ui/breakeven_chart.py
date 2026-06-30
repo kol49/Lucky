@@ -11,7 +11,7 @@ class BreakEvenChart(QWidget):
         self.plot = pg.PlotWidget()
         self.plot.setBackground("w")
         self.plot.showGrid(x=True, y=True, alpha=0.22)
-        self.plot.setLabel("left", "Деньги", units="$")
+        self.plot.setLabel("left", "Деньги", units="грн")
         self.plot.setLabel("bottom", "Объем продаж", units="шт.")
         self.plot.addLegend(offset=(15, 15))
 
@@ -71,7 +71,7 @@ class BreakEvenChart(QWidget):
         if target_units:
             target_y = sale_price * target_units
             self.target_marker.setData([target_units], [target_y])
-            self.target_label.setText(f"Цель ${target_profit:,.0f}: {target_units} шт.")
+            self.target_label.setText(f"Цель {target_profit:,.0f} грн: {target_units} шт.")
             self.target_label.setPos(target_units, target_y)
         else:
             self.target_marker.setData([], [])

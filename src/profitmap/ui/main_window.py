@@ -275,7 +275,7 @@ class ProductDetailWidget(QWidget):
         self.fixed_costs = money_spin(10_000_000)
         self.target_profit = QComboBox()
         for value in [500, 1000, 5000, 10000]:
-            self.target_profit.addItem(f"${value:,}", value)
+            self.target_profit.addItem(f"{value:,} грн", value)
 
         watched = [
             self.purchase_price,
@@ -296,9 +296,9 @@ class ProductDetailWidget(QWidget):
         self.photo = PhotoDropLabel()
 
         self.metric_labels = {
-            "full_cost": QLabel("$0.00"),
-            "gross": QLabel("$0.00"),
-            "net": QLabel("$0.00"),
+            "full_cost": QLabel("0.00 грн"),
+            "gross": QLabel("0.00 грн"),
+            "net": QLabel("0.00 грн"),
             "margin": QLabel("0%"),
             "markup": QLabel("0%"),
             "roi": QLabel("0%"),
@@ -309,10 +309,10 @@ class ProductDetailWidget(QWidget):
             label.setObjectName("MetricValue")
 
         self.price_labels = {
-            "min": QLabel("$0.00"),
-            "recommended": QLabel("$0.00"),
-            "aggressive": QLabel("$0.00"),
-            "premium": QLabel("$0.00"),
+            "min": QLabel("0.00 грн"),
+            "recommended": QLabel("0.00 грн"),
+            "aggressive": QLabel("0.00 грн"),
+            "premium": QLabel("0.00 грн"),
         }
         for label in self.price_labels.values():
             label.setObjectName("MetricValue")
@@ -832,12 +832,12 @@ def money_spin(maximum: int = 1_000_000) -> QDoubleSpinBox:
     spin.setRange(0, maximum)
     spin.setDecimals(2)
     spin.setSingleStep(1)
-    spin.setPrefix("$")
+    spin.setSuffix(" грн")
     return spin
 
 
 def money(value: float) -> str:
-    return f"${value:,.2f}"
+    return f"{value:,.2f} грн"
 
 
 def scroll_form(form: QFormLayout) -> QWidget:

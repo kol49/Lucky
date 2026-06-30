@@ -31,7 +31,7 @@ def analyze_business(products: list[Product], total_fixed_expenses: float) -> st
 
 
 def _build_summary(products: list[Product], total_fixed_expenses: float) -> str:
-    rows = [f"Постоянные расходы: ${total_fixed_expenses:,.2f}"]
+    rows = [f"Постоянные расходы: {total_fixed_expenses:,.2f} грн"]
     for product in products:
         result = calculate_unit_economics(
             UnitEconomicsInput(
@@ -83,7 +83,7 @@ def _rule_based_recommendations(products: list[Product], total_fixed_expenses: f
         )
 
         if result.margin_percent < 10:
-            action = f"поднять цену минимум до ${result.recommended_price:.2f} или снизить переменные расходы"
+            action = f"поднять цену минимум до {result.recommended_price:.2f} грн или снизить переменные расходы"
         elif product.stock < max(product.expected_monthly_sales // 2, 10):
             action = "увеличить закупку, запас ниже половины ожидаемых месячных продаж"
         elif result.roi_percent > 45 and product.stock > product.expected_monthly_sales * 2:
@@ -99,5 +99,5 @@ def _rule_based_recommendations(products: list[Product], total_fixed_expenses: f
         )
 
     lines.append("")
-    lines.append(f"Общие постоянные расходы: ${total_fixed_expenses:,.2f}. Проверьте распределение расходов по выручке и марже перед крупной закупкой.")
+    lines.append(f"Общие постоянные расходы: {total_fixed_expenses:,.2f} грн. Проверьте распределение расходов по выручке и марже перед крупной закупкой.")
     return "\n".join(lines)

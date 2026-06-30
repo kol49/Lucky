@@ -69,4 +69,4 @@ def _calculation(numerator: float, denominator: float) -> str:
 
 
 def _money(value: float) -> str:
-    return f"${value:,.2f}"
+    return f"{value:,.2f} грн"

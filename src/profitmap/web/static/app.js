@@ -1,4 +1,4 @@
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH" });
 let state = {};
 let selectedProduct = null;
 
@@ -325,7 +325,7 @@ function renderChart(product) {
       zerolinecolor: dark ? "#3b4558" : "#d1d5db",
     },
     yaxis: {
-      title: { text: "Деньги, $", standoff: 16 },
+      title: { text: "Деньги, грн", standoff: 16 },
       automargin: true,
       gridcolor: dark ? "#263142" : "#e5e7eb",
       zerolinecolor: dark ? "#3b4558" : "#d1d5db",
