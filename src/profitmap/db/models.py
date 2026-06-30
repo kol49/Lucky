@@ -77,6 +77,18 @@ class FixedExpense(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class VariableExpense(Base):
+    __tablename__ = "variable_expenses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    expense_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    category: Mapped[str] = mapped_column(String(120), index=True)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class SaleRecord(Base):
     __tablename__ = "sales"
 

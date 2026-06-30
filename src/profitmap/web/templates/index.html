@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260630-sales-uah" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260630-monthly-import" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -249,13 +249,33 @@
             <tbody id="analyticsTable"></tbody>
           </table>
         </section>
+        <section class="panel">
+          <h2>Статистика по месяцам</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Месяц</th>
+                <th>Продаж</th>
+                <th>Количество</th>
+                <th>Выручка</th>
+                <th>Средняя цена</th>
+                <th>Закупка</th>
+                <th>Валовая прибыль</th>
+                <th>Непостоянные расходы</th>
+                <th>Постоянные расходы</th>
+                <th>Чистая прибыль</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyStatsTable"></tbody>
+          </table>
+        </section>
       </section>
 
       <section class="view" id="expenses">
         <header class="topbar">
           <div>
-            <h1>Постоянные расходы</h1>
-            <p>Добавление расходов и распределение между товарами.</p>
+            <h1>Расходы</h1>
+            <p>Постоянные расходы распределяются между товарами, непостоянные попадают в месячную прибыль.</p>
           </div>
           <div class="actions">
             <select id="allocationMethod">
@@ -268,6 +288,7 @@
           </div>
         </header>
         <section class="panel">
+          <h2>Постоянные расходы</h2>
           <form id="expenseForm" class="expense-form">
             <input type="date" name="expense_date" required />
             <select name="category">
@@ -300,6 +321,38 @@
             <tbody id="expensesTable"></tbody>
           </table>
         </section>
+        <section class="panel">
+          <h2>Непостоянные расходы</h2>
+          <form id="variableExpenseForm" class="expense-form">
+            <input type="date" name="expense_date" required />
+            <select name="category">
+              <option>Доставка</option>
+              <option>Упаковка</option>
+              <option>Комиссия</option>
+              <option>Возврат</option>
+              <option>Скидка</option>
+              <option>Реклама на продажу</option>
+              <option>Прочее</option>
+            </select>
+            <input name="amount" type="number" min="0" step="0.01" placeholder="Сумма" required />
+            <input name="reason" placeholder="Причина расхода" />
+            <input name="comment" placeholder="Комментарий" />
+            <button>Добавить</button>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Категория</th>
+                <th>Сумма</th>
+                <th>Причина</th>
+                <th>Комментарий</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="variableExpensesTable"></tbody>
+          </table>
+        </section>
       </section>
 
       <section class="view" id="ai">
@@ -316,6 +369,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260630-sales-uah"></script>
+    <script src="/static/app.js?v=20260630-monthly-import"></script>
   </body>
 </html>

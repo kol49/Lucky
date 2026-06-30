@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from profitmap.db.models import FixedExpense, Product, ProductSupply, SaleRecord
+from profitmap.db.models import FixedExpense, Product, ProductSupply, SaleRecord, VariableExpense
 from profitmap.db.session import init_database
 from profitmap.services.ai_consultant import analyze_business
 from profitmap.services.allocation import allocate_fixed_expenses
@@ -183,11 +183,16 @@ def state() -> dict[str, Any]:
     with SessionFactory() as session:
         products = list(session.scalars(select(Product).order_by(Product.name)))
         expenses = list(session.scalars(select(FixedExpense).order_by(FixedExpense.expense_date.desc())))
+        variable_expenses = list(
+            session.scalars(select(VariableExpense).order_by(VariableExpense.expense_date.desc(), VariableExpense.id.desc()))
+        )
         return {
             "products": [_product_summary(product) for product in products],
             "selectedProduct": _product_detail(products[0]) if products else None,
             "sales": _all_sales(session),
             "expenses": [_expense_dict(expense) for expense in expenses],
+            "variable_expenses": [_variable_expense_dict(expense) for expense in variable_expenses],
+            "monthly_stats": _monthly_stats(session),
             "analytics": _analytics(session, products),
         }
 
@@ -400,6 +405,41 @@ def delete_expense(expense_id: int) -> dict[str, str]:
         return {"status": "deleted"}
 
 
+@app.get("/api/variable-expenses")
+def get_variable_expenses() -> list[dict[str, Any]]:
+    with SessionFactory() as session:
+        expenses = list(
+            session.scalars(select(VariableExpense).order_by(VariableExpense.expense_date.desc(), VariableExpense.id.desc()))
+        )
+        return [_variable_expense_dict(expense) for expense in expenses]
+
+
+@app.post("/api/variable-expenses")
+def create_variable_expense(payload: ExpensePayload) -> dict[str, Any]:
+    with SessionFactory() as session:
+        expense = VariableExpense(
+            expense_date=payload.expense_date,
+            category=payload.category,
+            amount=payload.amount,
+            reason=payload.reason,
+            comment=payload.comment,
+        )
+        session.add(expense)
+        session.commit()
+        return _variable_expense_dict(expense)
+
+
+@app.delete("/api/variable-expenses/{expense_id}")
+def delete_variable_expense(expense_id: int) -> dict[str, str]:
+    with SessionFactory() as session:
+        expense = session.get(VariableExpense, expense_id)
+        if not expense:
+            raise HTTPException(status_code=404, detail="Variable expense not found")
+        session.delete(expense)
+        session.commit()
+        return {"status": "deleted"}
+
+
 @app.post("/api/allocate-expenses")
 def allocate_expenses(payload: AllocationPayload) -> dict[str, Any]:
     if payload.method == "manual":
@@ -512,6 +552,17 @@ def _expense_dict(expense: FixedExpense) -> dict[str, Any]:
     }
 
 
+def _variable_expense_dict(expense: VariableExpense) -> dict[str, Any]:
+    return {
+        "id": expense.id,
+        "expense_date": expense.expense_date.isoformat(),
+        "category": expense.category,
+        "amount": expense.amount,
+        "reason": expense.reason,
+        "comment": expense.comment,
+    }
+
+
 def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
     return {
         "id": supply.id,
@@ -561,9 +612,58 @@ def _all_sales(session) -> list[dict[str, Any]]:
     return [_sale_with_product_dict(sale, product) for sale, product in rows]
 
 
+def _month_key(value: date) -> str:
+    return value.strftime("%Y-%m")
+
+
+def _monthly_stats(session) -> list[dict[str, Any]]:
+    months: dict[str, dict[str, Any]] = {}
+
+    def row_for(month: str) -> dict[str, Any]:
+        if month not in months:
+            months[month] = {
+                "month": month,
+                "sales_count": 0,
+                "quantity": 0,
+                "revenue": 0.0,
+                "purchase_cost": 0.0,
+                "gross_profit": 0.0,
+                "variable_expenses": 0.0,
+                "fixed_expenses": 0.0,
+                "net_profit": 0.0,
+                "average_price": 0.0,
+            }
+        return months[month]
+
+    sale_rows = session.execute(select(SaleRecord, Product).join(Product, SaleRecord.product_id == Product.id))
+    for sale, product in sale_rows:
+        row = row_for(_month_key(sale.sale_date))
+        purchase_cost = product.purchase_price * sale.quantity
+        row["sales_count"] += 1
+        row["quantity"] += sale.quantity
+        row["revenue"] += sale.revenue
+        row["purchase_cost"] += purchase_cost
+        row["gross_profit"] += sale.revenue - purchase_cost
+
+    for expense in session.scalars(select(VariableExpense)):
+        row_for(_month_key(expense.expense_date))["variable_expenses"] += expense.amount
+
+    for expense in session.scalars(select(FixedExpense)):
+        row_for(_month_key(expense.expense_date))["fixed_expenses"] += expense.amount
+
+    for row in months.values():
+        row["net_profit"] = row["gross_profit"] - row["variable_expenses"] - row["fixed_expenses"]
+        row["average_price"] = (row["revenue"] / row["quantity"]) if row["quantity"] else 0.0
+        for key in ("revenue", "purchase_cost", "gross_profit", "variable_expenses", "fixed_expenses", "net_profit", "average_price"):
+            row[key] = round(row[key], 2)
+
+    return sorted(months.values(), key=lambda item: item["month"], reverse=True)
+
+
 def _analytics(session, products: list[Product]) -> dict[str, Any]:
     total_revenue = float(session.scalar(select(func.coalesce(func.sum(SaleRecord.revenue), 0))) or 0)
     total_fixed = float(session.scalar(select(func.coalesce(func.sum(FixedExpense.amount), 0))) or 0)
+    total_variable = float(session.scalar(select(func.coalesce(func.sum(VariableExpense.amount), 0))) or 0)
     rows = []
     total_profit = 0.0
     for product in products:
@@ -602,11 +702,13 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
         row["abc"] = "A" if share <= 0.8 else "B" if share <= 0.95 else "C"
 
     coefficients = build_profit_coefficients(products, total_fixed)
+    net_profit_after_variable = total_profit - total_variable
     return {
         "total_revenue": total_revenue,
-        "total_profit": total_profit,
-        "cash_flow": total_profit - total_fixed,
-        "margin_percent": round((total_profit / total_revenue * 100) if total_revenue else 0, 1),
+        "total_profit": net_profit_after_variable,
+        "total_variable_expenses": total_variable,
+        "cash_flow": total_profit - total_fixed - total_variable,
+        "margin_percent": round((net_profit_after_variable / total_revenue * 100) if total_revenue else 0, 1),
         "profitable_count": len([row for row in rows if row["profit"] > 0]),
         "loss_count": len([row for row in rows if row["profit"] <= 0]),
         "rows": ranked,

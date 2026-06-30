@@ -64,6 +64,7 @@ function bindActions() {
   document.getElementById("runAi").addEventListener("click", runAi);
   document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
+  document.getElementById("variableExpenseForm").addEventListener("submit", addVariableExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
   document.getElementById("saleForm").addEventListener("submit", addSale);
   document.getElementById("quickSaleForm").addEventListener("submit", addQuickSale);
@@ -71,6 +72,7 @@ function bindActions() {
   document.getElementById("salesSearch").addEventListener("input", renderSalesPage);
   document.getElementById("salesProductFilter").addEventListener("change", renderSalesPage);
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
+  document.querySelector("#variableExpenseForm [name='expense_date']").valueAsDate = new Date();
   document.querySelector("[name='supply_date']").valueAsDate = new Date();
   document.querySelector("#saleForm [name='sale_date']").valueAsDate = new Date();
   document.querySelector("#quickSaleForm [name='sale_date']").valueAsDate = new Date();
@@ -88,6 +90,7 @@ async function loadState(preferredProductId = null) {
   renderSelectedProduct();
   renderSalesPage();
   renderExpenses();
+  renderVariableExpenses();
   renderAnalytics();
 }
 
@@ -531,6 +534,7 @@ function renderAnalytics() {
   document.getElementById("analyticsMetrics").innerHTML = [
     ["Выручка", money.format(analytics.total_revenue || 0)],
     ["Прибыль", money.format(analytics.total_profit || 0)],
+    ["Непостоянные расходы", money.format(analytics.total_variable_expenses || 0)],
     ["Cash Flow", money.format(analytics.cash_flow || 0)],
     ["Маржа", `${Number(analytics.margin_percent || 0).toFixed(1)}%`],
     ["Топ товаров", analytics.profitable_count || 0],
@@ -565,6 +569,24 @@ function renderAnalytics() {
         </tr>`,
     )
     .join("");
+
+  document.getElementById("monthlyStatsTable").innerHTML = (state.monthly_stats || [])
+    .map(
+      (row) => `
+        <tr>
+          <td>${row.month}</td>
+          <td class="numeric">${row.sales_count}</td>
+          <td class="numeric">${row.quantity}</td>
+          <td class="numeric">${money.format(row.revenue)}</td>
+          <td class="numeric">${money.format(row.average_price)}</td>
+          <td class="numeric">${money.format(row.purchase_cost)}</td>
+          <td class="numeric ${row.gross_profit >= 0 ? "positive" : "negative"}">${money.format(row.gross_profit)}</td>
+          <td class="numeric">${money.format(row.variable_expenses)}</td>
+          <td class="numeric">${money.format(row.fixed_expenses)}</td>
+          <td class="numeric ${row.net_profit >= 0 ? "positive" : "negative"}">${money.format(row.net_profit)}</td>
+        </tr>`,
+    )
+    .join("") || `<tr><td colspan="10" class="empty">Месячной статистики пока нет</td></tr>`;
 }
 
 function renderExpenses() {
@@ -604,6 +626,46 @@ async function deleteExpense(event) {
   const confirmed = window.confirm("Удалить этот расход?");
   if (!confirmed) return;
   await fetchJson(`/api/expenses/${expenseId}`, { method: "DELETE" });
+  await loadState();
+}
+
+function renderVariableExpenses() {
+  const expenses = state.variable_expenses || [];
+  document.getElementById("variableExpensesTable").innerHTML = expenses.length ? expenses
+    .map(
+      (expense) => `
+        <tr data-id="${expense.id}">
+          <td>${expense.expense_date}</td>
+          <td>${escapeHtml(expense.category)}</td>
+          <td class="numeric">${money.format(expense.amount)}</td>
+          <td>${escapeHtml(expense.reason || "")}</td>
+          <td>${escapeHtml(expense.comment || "")}</td>
+          <td class="action-cell"><button class="danger icon-button" data-variable-expense-id="${expense.id}" title="Удалить расход">Удалить</button></td>
+        </tr>`,
+    )
+    .join("") : `<tr><td colspan="6" class="empty">Непостоянных расходов пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-variable-expense-id]").forEach((button) => {
+    button.addEventListener("click", deleteVariableExpense);
+  });
+}
+
+async function addVariableExpense(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.amount = Number(payload.amount || 0);
+  await fetchJson("/api/variable-expenses", { method: "POST", body: JSON.stringify(payload) });
+  form.reset();
+  form.querySelector("[name='expense_date']").valueAsDate = new Date();
+  await loadState();
+}
+
+async function deleteVariableExpense(event) {
+  const expenseId = event.currentTarget.dataset.variableExpenseId;
+  const confirmed = window.confirm("Удалить этот непостоянный расход?");
+  if (!confirmed) return;
+  await fetchJson(`/api/variable-expenses/${expenseId}`, { method: "DELETE" });
   await loadState();
 }
 

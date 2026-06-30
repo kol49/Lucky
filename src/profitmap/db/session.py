@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from profitmap.db.models import Base, FixedExpense, Product, ProductSupply, SaleRecord
+from profitmap.db.models import Base, FixedExpense, Product, ProductSupply, SaleRecord, VariableExpense
 
 
 def init_database(db_path: Path) -> sessionmaker[Session]:
