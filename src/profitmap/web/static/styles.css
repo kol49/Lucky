@@ -238,7 +238,7 @@ select {
 .workspace {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(560px, 0.9fr) minmax(760px, 1.35fr);
+  grid-template-columns: 1fr;
   min-width: 0;
 }
 
@@ -252,7 +252,8 @@ select {
 }
 
 .table-panel {
-  max-height: calc(100vh - 112px);
+  min-height: calc(100vh - 116px);
+  max-height: calc(100vh - 116px);
   overflow: auto;
   padding: 0;
 }
@@ -277,9 +278,27 @@ td {
 
 .products-grid th {
   background: var(--panel);
+  cursor: pointer;
   position: sticky;
   top: 0;
   z-index: 1;
+  user-select: none;
+}
+
+.products-grid th::after {
+  color: var(--muted);
+  content: "";
+  display: inline-block;
+  font-size: 10px;
+  margin-left: 6px;
+}
+
+.products-grid th.sorted[data-direction="asc"]::after {
+  content: "▲";
+}
+
+.products-grid th.sorted[data-direction="desc"]::after {
+  content: "▼";
 }
 
 .products-grid th:nth-child(1),
@@ -352,7 +371,7 @@ tbody tr.selected {
 }
 
 .detail-panel {
-  min-height: calc(100vh - 112px);
+  min-height: auto;
 }
 
 .metrics,
@@ -538,7 +557,8 @@ pre {
   }
 
   .table-panel {
-    max-height: 460px;
+    min-height: calc(100vh - 116px);
+    max-height: calc(100vh - 116px);
   }
 }
 

@@ -1,6 +1,7 @@
 const money = new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH" });
 let state = {};
 let selectedProduct = null;
+let productSort = { key: "sku", direction: "asc" };
 
 const fields = [
   ["name", "Название", "text"],
@@ -57,6 +58,9 @@ function bindNavigation() {
 
 function bindActions() {
   document.getElementById("search").addEventListener("input", renderProducts);
+  document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
+    header.addEventListener("click", () => sortProducts(header.dataset.sort));
+  });
   document.getElementById("targetProfit").addEventListener("change", () => selectedProduct && renderChart(readProductForm()));
   document.getElementById("saveProduct").addEventListener("click", saveProduct);
   document.getElementById("deleteProduct").addEventListener("click", deleteProduct);
@@ -96,9 +100,10 @@ async function loadState(preferredProductId = null) {
 
 function renderProducts() {
   const query = document.getElementById("search").value.toLowerCase();
-  const rows = (state.products || []).filter((product) =>
-    `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query),
-  );
+  const rows = sortProductRows((state.products || []).filter((product) =>
+    `${product.sku} ${product.name} ${product.category} ${product.product_class} ${product.supplier_name}`.toLowerCase().includes(query),
+  ));
+  renderProductSortHeaders();
   document.getElementById("productsTable").innerHTML = rows.length ? rows
     .map(
       (product) => `
@@ -122,6 +127,36 @@ function renderProducts() {
       renderProducts();
       renderSelectedProduct();
     });
+  });
+}
+
+function sortProducts(key) {
+  if (productSort.key === key) {
+    productSort.direction = productSort.direction === "asc" ? "desc" : "asc";
+  } else {
+    productSort = { key, direction: "asc" };
+  }
+  renderProducts();
+}
+
+function sortProductRows(rows) {
+  const numericKeys = new Set(["stock", "purchase_price", "sale_price"]);
+  const direction = productSort.direction === "asc" ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const leftValue = left[productSort.key] ?? "";
+    const rightValue = right[productSort.key] ?? "";
+    if (numericKeys.has(productSort.key)) {
+      return (Number(leftValue || 0) - Number(rightValue || 0)) * direction;
+    }
+    return String(leftValue).localeCompare(String(rightValue), "ru", { numeric: true, sensitivity: "base" }) * direction;
+  });
+}
+
+function renderProductSortHeaders() {
+  document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
+    const active = header.dataset.sort === productSort.key;
+    header.classList.toggle("sorted", active);
+    header.dataset.direction = active ? productSort.direction : "";
   });
 }
 

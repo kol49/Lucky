@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260706-warehouse-prices" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260706-fullscreen-sort" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -39,14 +39,14 @@
             <table class="products-grid">
               <thead>
                 <tr>
-                  <th>SKU</th>
-                  <th>Название</th>
-                  <th>Класс</th>
-                  <th>Категория</th>
-                  <th>Остаток</th>
-                  <th>Входная цена</th>
-                  <th>Цена продажи</th>
-                  <th>Поставщик</th>
+                  <th data-sort="sku">Артикул</th>
+                  <th data-sort="name">Название</th>
+                  <th data-sort="product_class">Класс</th>
+                  <th data-sort="category">Категория</th>
+                  <th data-sort="stock" class="numeric">Остаток</th>
+                  <th data-sort="purchase_price" class="numeric">Входная цена</th>
+                  <th data-sort="sale_price" class="numeric">Цена продажи</th>
+                  <th data-sort="supplier_name">Поставщик</th>
                 </tr>
               </thead>
               <tbody id="productsTable"></tbody>
@@ -368,6 +368,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260706-warehouse-prices"></script>
+    <script src="/static/app.js?v=20260706-fullscreen-sort"></script>
   </body>
 </html>
