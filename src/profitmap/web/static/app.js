@@ -101,7 +101,7 @@ async function loadState(preferredProductId = null) {
 function renderProducts() {
   const query = document.getElementById("search").value.toLowerCase();
   const rows = sortProductRows((state.products || []).filter((product) =>
-    `${product.sku} ${product.name} ${product.category} ${product.product_class} ${product.supplier_name}`.toLowerCase().includes(query),
+    `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query),
   ));
   renderProductSortHeaders();
   document.getElementById("productsTable").innerHTML = rows.length ? rows
@@ -110,7 +110,6 @@ function renderProducts() {
         <tr class="${selectedProduct && selectedProduct.id === product.id ? "selected" : ""}" data-id="${product.id}">
           <td>${escapeHtml(product.sku)}</td>
           <td>${escapeHtml(product.name)}</td>
-          <td>${escapeHtml(product.product_class || "")}</td>
           <td>${escapeHtml(product.category || "")}</td>
           <td class="numeric">${product.stock}</td>
           <td class="numeric">${money.format(product.purchase_price || 0)}</td>
@@ -118,7 +117,7 @@ function renderProducts() {
           <td>${escapeHtml(product.supplier_name || "")}</td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="8" class="empty">Товаров пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="7" class="empty">Товаров пока нет</td></tr>`;
 
   document.querySelectorAll("#productsTable tr").forEach((row) => {
     row.addEventListener("click", async () => {
