@@ -112,12 +112,14 @@ function renderProducts() {
           <td>${escapeHtml(product.name)}</td>
           <td>${escapeHtml(product.category || "")}</td>
           <td class="numeric">${product.stock}</td>
+          <td class="numeric">${product.supplied_quantity || 0}</td>
+          <td class="numeric">${product.sold_quantity || 0}</td>
           <td class="numeric">${money.format(product.purchase_price || 0)}</td>
           <td class="numeric">${money.format(product.sale_price)}</td>
           <td>${escapeHtml(product.supplier_name || "")}</td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="7" class="empty">Товаров пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="9" class="empty">Товаров пока нет</td></tr>`;
 
   document.querySelectorAll("#productsTable tr").forEach((row) => {
     row.addEventListener("click", async () => {
@@ -139,7 +141,7 @@ function sortProducts(key) {
 }
 
 function sortProductRows(rows) {
-  const numericKeys = new Set(["stock", "purchase_price", "sale_price"]);
+  const numericKeys = new Set(["stock", "supplied_quantity", "sold_quantity", "purchase_price", "sale_price"]);
   const direction = productSort.direction === "asc" ? 1 : -1;
   return [...rows].sort((left, right) => {
     const leftValue = left[productSort.key] ?? "";

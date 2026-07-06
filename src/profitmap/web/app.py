@@ -471,6 +471,8 @@ def analyze() -> dict[str, str]:
 
 def _product_summary(product: Product) -> dict[str, Any]:
     economics = _economics(product)
+    supplied_quantity = sum(max(supply.quantity, 0) for supply in product.supplies)
+    sold_quantity = sum(max(sale.quantity, 0) for sale in product.sales)
     return {
         "id": product.id,
         "sku": product.sku,
@@ -478,6 +480,8 @@ def _product_summary(product: Product) -> dict[str, Any]:
         "category": product.category,
         "product_class": product.product_class,
         "stock": product.stock,
+        "supplied_quantity": supplied_quantity,
+        "sold_quantity": sold_quantity,
         "purchase_price": product.purchase_price,
         "sale_price": product.sale_price,
         "profit_per_unit": economics.net_profit_per_unit,

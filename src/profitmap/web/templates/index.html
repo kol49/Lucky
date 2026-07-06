@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260706-no-class" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260706-stock-flow" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -43,6 +43,8 @@
                   <th data-sort="name">Название</th>
                   <th data-sort="category">Категория</th>
                   <th data-sort="stock" class="numeric">Остаток</th>
+                  <th data-sort="supplied_quantity" class="numeric">Поставлено</th>
+                  <th data-sort="sold_quantity" class="numeric">Продано</th>
                   <th data-sort="purchase_price" class="numeric">Входная цена</th>
                   <th data-sort="sale_price" class="numeric">Цена продажи</th>
                   <th data-sort="supplier_name">Поставщик</th>
@@ -367,6 +369,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260706-no-class"></script>
+    <script src="/static/app.js?v=20260706-stock-flow"></script>
   </body>
 </html>
