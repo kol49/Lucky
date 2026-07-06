@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260630-monthly-import" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260706-warehouse-products" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -25,8 +25,8 @@
       <section class="view active" id="products">
         <header class="topbar">
           <div>
-            <h1>Товары</h1>
-            <p>Юнит-экономика, цены и точка безубыточности по каждому товару.</p>
+            <h1>Склад товаров</h1>
+            <p>Остатки, закупка, продажная цена и быстрый переход в карточку товара.</p>
           </div>
           <div class="actions">
             <input id="search" placeholder="Поиск по товару, SKU или поставщику" />
@@ -36,7 +36,7 @@
 
         <div class="workspace">
           <section class="panel table-panel">
-            <table>
+            <table class="products-grid">
               <thead>
                 <tr>
                   <th>SKU</th>
@@ -44,10 +44,9 @@
                   <th>Класс</th>
                   <th>Категория</th>
                   <th>Остаток</th>
+                  <th>Закупка</th>
                   <th>Продажа</th>
-                  <th>Прибыль</th>
-                  <th>Маржа</th>
-                  <th>ROI</th>
+                  <th>Поставщик</th>
                 </tr>
               </thead>
               <tbody id="productsTable"></tbody>
@@ -369,6 +368,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260630-monthly-import"></script>
+    <script src="/static/app.js?v=20260706-warehouse-products"></script>
   </body>
 </html>

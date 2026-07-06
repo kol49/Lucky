@@ -108,13 +108,12 @@ function renderProducts() {
           <td>${escapeHtml(product.product_class || "")}</td>
           <td>${escapeHtml(product.category || "")}</td>
           <td class="numeric">${product.stock}</td>
+          <td class="numeric">${money.format(product.purchase_price || 0)}</td>
           <td class="numeric">${money.format(product.sale_price)}</td>
-          <td class="numeric ${product.profit_per_unit >= 0 ? "positive" : "negative"}">${money.format(product.profit_per_unit)}</td>
-          <td class="numeric">${product.margin_percent.toFixed(1)}%</td>
-          <td class="numeric">${product.roi_percent.toFixed(1)}%</td>
+          <td>${escapeHtml(product.supplier_name || "")}</td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="9" class="empty">Товаров пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="8" class="empty">Товаров пока нет</td></tr>`;
 
   document.querySelectorAll("#productsTable tr").forEach((row) => {
     row.addEventListener("click", async () => {
