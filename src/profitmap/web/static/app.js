@@ -146,11 +146,37 @@ function sortProductRows(rows) {
   return [...rows].sort((left, right) => {
     const leftValue = left[productSort.key] ?? "";
     const rightValue = right[productSort.key] ?? "";
+    if (productSort.key === "sku") {
+      return compareArticles(leftValue, rightValue) * direction;
+    }
     if (numericKeys.has(productSort.key)) {
       return (Number(leftValue || 0) - Number(rightValue || 0)) * direction;
     }
     return String(leftValue).localeCompare(String(rightValue), "ru", { numeric: true, sensitivity: "base" }) * direction;
   });
+}
+
+function compareArticles(leftValue, rightValue) {
+  const left = parseArticle(leftValue);
+  const right = parseArticle(rightValue);
+  const prefixCompare = left.prefix.localeCompare(right.prefix, "ru", { sensitivity: "base" });
+  if (prefixCompare !== 0) return prefixCompare;
+  if (left.number !== null && right.number !== null && left.number !== right.number) {
+    return left.number - right.number;
+  }
+  if (left.number !== null && right.number === null) return -1;
+  if (left.number === null && right.number !== null) return 1;
+  return left.raw.localeCompare(right.raw, "ru", { numeric: true, sensitivity: "base" });
+}
+
+function parseArticle(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^([^0-9]*)(\d+)?(.*)$/);
+  return {
+    raw,
+    prefix: (match?.[1] || raw).trim().toLowerCase(),
+    number: match?.[2] ? Number(match[2]) : null,
+  };
 }
 
 function renderProductSortHeaders() {
