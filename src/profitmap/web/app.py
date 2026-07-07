@@ -684,14 +684,9 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
         invested = supply_summary.total_cost
         if not supply_summary.total_quantity:
             invested = (product.stock + sold_quantity) * product.purchase_price
-        if sales:
-            revenue = sum(sale.revenue for sale in sales)
-            quantity = sold_quantity
-            profit = sum((sale.unit_price - economics.full_cost_per_unit) * sale.quantity for sale in sales)
-        else:
-            revenue = product.sale_price * product.expected_monthly_sales
-            quantity = product.expected_monthly_sales
-            profit = economics.net_profit_per_unit * product.expected_monthly_sales
+        revenue = sum(sale.revenue for sale in sales)
+        quantity = sold_quantity
+        profit = sum((sale.unit_price - economics.full_cost_per_unit) * sale.quantity for sale in sales)
         total_profit += profit
         total_invested += invested
         quantities = list(
@@ -712,12 +707,15 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
             }
         )
     ranked = sorted(rows, key=lambda row: row["revenue"], reverse=True)
-    total_expected_revenue = sum(row["revenue"] for row in ranked) or 1
+    total_expected_revenue = sum(row["revenue"] for row in ranked)
     running = 0.0
     for row in ranked:
-        running += row["revenue"]
-        share = running / total_expected_revenue
-        row["abc"] = "A" if share <= 0.8 else "B" if share <= 0.95 else "C"
+        if total_expected_revenue:
+            running += row["revenue"]
+            share = running / total_expected_revenue
+            row["abc"] = "A" if share <= 0.8 else "B" if share <= 0.95 else "C"
+        else:
+            row["abc"] = "C"
 
     coefficients = build_profit_coefficients(products, total_fixed)
     net_profit_after_variable = total_profit - total_variable
