@@ -319,8 +319,10 @@ function renderSupplies() {
 function renderSales() {
   if (!selectedProduct) return;
   const summary = selectedProduct.sales_summary || {};
+  const purchaseTotal = Number(selectedProduct.purchase_price || 0) * Number(summary.total_quantity || 0);
+  const profitTotal = Number(summary.total_revenue || 0) - purchaseTotal;
   document.getElementById("salesSummary").textContent =
-    `Продано: ${summary.total_quantity || 0} шт. · Средняя цена: ${money.format(summary.average_sale_price || selectedProduct.sale_price || 0)} · Скидка от базовой цены: ${Number(summary.discount_percent || 0).toFixed(1)}% · Выручка: ${money.format(summary.total_revenue || 0)}`;
+    `Продано: ${summary.total_quantity || 0} шт. · Закупка: ${money.format(purchaseTotal)} · Продажа: ${money.format(summary.total_revenue || 0)} · Разница: ${money.format(profitTotal)}`;
 
   const sales = selectedProduct.sales || [];
   document.getElementById("salesTable").innerHTML = sales.length ? sales
@@ -378,12 +380,14 @@ function renderSalesPage() {
 
   const totalQuantity = filteredSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + Number(sale.revenue || 0), 0);
-  const averagePrice = totalQuantity ? totalRevenue / totalQuantity : 0;
+  const totalPurchase = filteredSales.reduce((sum, sale) => sum + Number(sale.purchase_total || 0), 0);
+  const totalProfit = filteredSales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
   document.getElementById("salesPageSummary").innerHTML = [
     ["Продаж", filteredSales.length],
     ["Количество", `${totalQuantity} шт.`],
-    ["Выручка", money.format(totalRevenue)],
-    ["Средняя цена", money.format(averagePrice)],
+    ["Закупка", money.format(totalPurchase)],
+    ["Продажа", money.format(totalRevenue)],
+    ["Разница", money.format(totalProfit)],
   ].map(metric).join("");
 
   document.getElementById("salesPageTable").innerHTML = filteredSales.length ? filteredSales
@@ -394,14 +398,15 @@ function renderSalesPage() {
           <td>${escapeHtml(sale.product_name)}</td>
           <td>${escapeHtml(sale.product_sku || "")}</td>
           <td class="numeric">${sale.quantity}</td>
+          <td class="numeric">${money.format(sale.purchase_price || 0)}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
           <td class="numeric">${money.format(sale.revenue)}</td>
-          <td class="numeric">${Number(sale.discount_percent || 0).toFixed(1)}%</td>
+          <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
           <td>${escapeHtml(sale.comment || "")}</td>
           <td class="action-cell"><button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="9" class="empty">Продаж пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
 
   document.querySelectorAll("[data-global-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteGlobalSale);
