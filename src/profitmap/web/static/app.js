@@ -601,6 +601,7 @@ function renderAnalytics() {
   const analytics = state.analytics || {};
   document.getElementById("analyticsMetrics").innerHTML = [
     ["Выручка", money.format(analytics.total_revenue || 0)],
+    ["Вложено", money.format(analytics.total_invested || 0)],
     ["Прибыль", money.format(analytics.total_profit || 0)],
     ["Непостоянные расходы", money.format(analytics.total_variable_expenses || 0)],
     ["Cash Flow", money.format(analytics.cash_flow || 0)],
@@ -631,6 +632,7 @@ function renderAnalytics() {
         <tr>
           <td>${escapeHtml(row.product)}</td>
           <td>${escapeHtml(row.sku || "")}</td>
+          <td class="numeric">${money.format(row.invested || 0)}</td>
           <td class="numeric">${money.format(row.revenue)}</td>
           <td class="numeric ${row.profit >= 0 ? "positive" : "negative"}">${money.format(row.profit)}</td>
           <td>${row.abc}</td>

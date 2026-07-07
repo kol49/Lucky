@@ -675,18 +675,25 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
     total_variable = float(session.scalar(select(func.coalesce(func.sum(VariableExpense.amount), 0))) or 0)
     rows = []
     total_profit = 0.0
+    total_invested = 0.0
     for product in products:
         economics = _economics(product)
         sales = list(product.sales)
+        sold_quantity = sum(sale.quantity for sale in sales)
+        supply_summary = calculate_supply_summary(product)
+        invested = supply_summary.total_cost
+        if not supply_summary.total_quantity:
+            invested = (product.stock + sold_quantity) * product.purchase_price
         if sales:
             revenue = sum(sale.revenue for sale in sales)
-            quantity = sum(sale.quantity for sale in sales)
+            quantity = sold_quantity
             profit = sum((sale.unit_price - economics.full_cost_per_unit) * sale.quantity for sale in sales)
         else:
             revenue = product.sale_price * product.expected_monthly_sales
             quantity = product.expected_monthly_sales
             profit = economics.net_profit_per_unit * product.expected_monthly_sales
         total_profit += profit
+        total_invested += invested
         quantities = list(
             session.scalars(
                 select(SaleRecord.quantity).where(SaleRecord.product_id == product.id).order_by(SaleRecord.sale_date)
@@ -697,6 +704,7 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
             {
                 "product": product.name,
                 "sku": product.sku,
+                "invested": round(invested, 2),
                 "revenue": revenue,
                 "profit": profit,
                 "quantity": quantity,
@@ -716,6 +724,7 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
     return {
         "total_revenue": total_revenue,
         "total_profit": net_profit_after_variable,
+        "total_invested": round(total_invested, 2),
         "total_variable_expenses": total_variable,
         "cash_flow": total_profit - total_fixed - total_variable,
         "margin_percent": round((net_profit_after_variable / total_revenue * 100) if total_revenue else 0, 1),
