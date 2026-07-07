@@ -384,14 +384,14 @@ function renderSalesPage() {
   const totalRevenue = filteredSales.reduce((sum, sale) => sum + Number(sale.revenue || 0), 0);
   const totalPurchase = filteredSales.reduce((sum, sale) => sum + Number(sale.purchase_total || 0), 0);
   const totalProfit = filteredSales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
-  const totalMargin = totalRevenue ? (totalProfit / totalRevenue) * 100 : 0;
+  const totalMarkup = totalPurchase ? (totalProfit / totalPurchase) * 100 : 0;
   document.getElementById("salesPageSummary").innerHTML = [
     ["Продаж", filteredSales.length],
     ["Количество", `${totalQuantity} шт.`],
     ["Закупка", money.format(totalPurchase)],
     ["Выручка", money.format(totalRevenue)],
     ["Разница", money.format(totalProfit)],
-    ["Маржа", `${totalMargin.toFixed(1)}%`],
+    ["Наценка", `${totalMarkup.toFixed(1)}%`],
   ].map(metric).join("");
 
   document.getElementById("salesPageTable").innerHTML = filteredSales.length ? filteredSales
@@ -405,7 +405,7 @@ function renderSalesPage() {
           <td class="numeric">${money.format(sale.purchase_total || 0)}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
           <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
-          <td class="numeric ${Number(sale.margin_percent || 0) >= 0 ? "positive" : "negative"}">${Number(sale.margin_percent || 0).toFixed(1)}%</td>
+          <td class="numeric ${Number(sale.markup_percent || 0) >= 0 ? "positive" : "negative"}">${Number(sale.markup_percent || 0).toFixed(1)}%</td>
           <td>${escapeHtml(sale.comment || "")}</td>
           <td class="action-cell"><button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
         </tr>`,

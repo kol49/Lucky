@@ -585,7 +585,7 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_price: float =
         discount_percent = max((base_sale_price - sale.unit_price) / base_sale_price * 100, 0)
     purchase_total = purchase_price * sale.quantity
     profit = sale.revenue - purchase_total
-    margin_percent = (profit / sale.revenue * 100) if sale.revenue else 0.0
+    markup_percent = (profit / purchase_total * 100) if purchase_total else 0.0
     return {
         "id": sale.id,
         "sale_date": sale.sale_date.isoformat(),
@@ -595,7 +595,7 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_price: float =
         "purchase_price": purchase_price,
         "purchase_total": round(purchase_total, 2),
         "profit": round(profit, 2),
-        "margin_percent": round(margin_percent, 1),
+        "markup_percent": round(markup_percent, 1),
         "discount_percent": round(discount_percent, 1),
         "comment": sale.comment,
     }
