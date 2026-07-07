@@ -628,6 +628,7 @@ function renderAnalytics() {
       (row) => `
         <tr>
           <td>${escapeHtml(row.product)}</td>
+          <td>${escapeHtml(row.sku || "")}</td>
           <td class="numeric">${money.format(row.revenue)}</td>
           <td class="numeric ${row.profit >= 0 ? "positive" : "negative"}">${money.format(row.profit)}</td>
           <td>${row.abc}</td>

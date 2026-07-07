@@ -696,6 +696,7 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
         rows.append(
             {
                 "product": product.name,
+                "sku": product.sku,
                 "revenue": revenue,
                 "profit": profit,
                 "quantity": quantity,
