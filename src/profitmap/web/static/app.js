@@ -322,7 +322,7 @@ function renderSales() {
   const purchaseTotal = Number(selectedProduct.purchase_price || 0) * Number(summary.total_quantity || 0);
   const profitTotal = Number(summary.total_revenue || 0) - purchaseTotal;
   document.getElementById("salesSummary").textContent =
-    `Продано: ${summary.total_quantity || 0} шт. · Закупка: ${money.format(purchaseTotal)} · Продажа: ${money.format(summary.total_revenue || 0)} · Разница: ${money.format(profitTotal)}`;
+    `Продано: ${summary.total_quantity || 0} шт. · Закупка: ${money.format(purchaseTotal)} · Выручка: ${money.format(summary.total_revenue || 0)} · Разница: ${money.format(profitTotal)}`;
 
   const sales = selectedProduct.sales || [];
   document.getElementById("salesTable").innerHTML = sales.length ? sales
@@ -332,13 +332,15 @@ function renderSales() {
           <td>${sale.sale_date}</td>
           <td class="numeric">${sale.quantity}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
+          <td class="numeric">${money.format(sale.purchase_total || 0)}</td>
           <td class="numeric">${money.format(sale.revenue)}</td>
+          <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
           <td class="numeric">${Number(sale.discount_percent || 0).toFixed(1)}%</td>
           <td>${escapeHtml(sale.comment || "")}</td>
           <td class="action-cell"><button class="danger icon-button" data-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="9" class="empty">Продаж пока нет</td></tr>`;
 
   document.querySelectorAll("[data-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteSale);
@@ -386,7 +388,7 @@ function renderSalesPage() {
     ["Продаж", filteredSales.length],
     ["Количество", `${totalQuantity} шт.`],
     ["Закупка", money.format(totalPurchase)],
-    ["Продажа", money.format(totalRevenue)],
+    ["Выручка", money.format(totalRevenue)],
     ["Разница", money.format(totalProfit)],
   ].map(metric).join("");
 
@@ -398,7 +400,7 @@ function renderSalesPage() {
           <td>${escapeHtml(sale.product_name)}</td>
           <td>${escapeHtml(sale.product_sku || "")}</td>
           <td class="numeric">${sale.quantity}</td>
-          <td class="numeric">${money.format(sale.purchase_price || 0)}</td>
+          <td class="numeric">${money.format(sale.purchase_total || 0)}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
           <td class="numeric">${money.format(sale.revenue)}</td>
           <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
@@ -645,7 +647,6 @@ function renderAnalytics() {
           <td class="numeric">${row.sales_count}</td>
           <td class="numeric">${row.quantity}</td>
           <td class="numeric">${money.format(row.revenue)}</td>
-          <td class="numeric">${money.format(row.average_price)}</td>
           <td class="numeric">${money.format(row.purchase_cost)}</td>
           <td class="numeric ${row.gross_profit >= 0 ? "positive" : "negative"}">${money.format(row.gross_profit)}</td>
           <td class="numeric">${money.format(row.variable_expenses)}</td>
@@ -653,7 +654,7 @@ function renderAnalytics() {
           <td class="numeric ${row.net_profit >= 0 ? "positive" : "negative"}">${money.format(row.net_profit)}</td>
         </tr>`,
     )
-    .join("") || `<tr><td colspan="10" class="empty">Месячной статистики пока нет</td></tr>`;
+    .join("") || `<tr><td colspan="9" class="empty">Месячной статистики пока нет</td></tr>`;
 }
 
 function renderExpenses() {

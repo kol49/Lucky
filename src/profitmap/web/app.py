@@ -579,34 +579,34 @@ def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
     }
 
 
-def _sale_dict(sale: SaleRecord, base_sale_price: float) -> dict[str, Any]:
+def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_price: float = 0.0) -> dict[str, Any]:
     discount_percent = 0.0
     if base_sale_price:
         discount_percent = max((base_sale_price - sale.unit_price) / base_sale_price * 100, 0)
+    purchase_total = purchase_price * sale.quantity
+    profit = sale.revenue - purchase_total
     return {
         "id": sale.id,
         "sale_date": sale.sale_date.isoformat(),
         "quantity": sale.quantity,
         "unit_price": sale.unit_price,
         "revenue": sale.revenue,
+        "purchase_price": purchase_price,
+        "purchase_total": round(purchase_total, 2),
+        "profit": round(profit, 2),
         "discount_percent": round(discount_percent, 1),
         "comment": sale.comment,
     }
 
 
 def _sale_with_product_dict(sale: SaleRecord, product: Product) -> dict[str, Any]:
-    payload = _sale_dict(sale, product.sale_price)
-    purchase_total = product.purchase_price * sale.quantity
-    profit = sale.revenue - purchase_total
+    payload = _sale_dict(sale, product.sale_price, product.purchase_price)
     payload.update(
         {
             "product_id": product.id,
             "product_name": product.name,
             "product_sku": product.sku,
             "base_sale_price": product.sale_price,
-            "purchase_price": product.purchase_price,
-            "purchase_total": round(purchase_total, 2),
-            "profit": round(profit, 2),
         }
     )
     return payload
