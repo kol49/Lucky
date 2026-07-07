@@ -402,13 +402,12 @@ function renderSalesPage() {
           <td class="numeric">${sale.quantity}</td>
           <td class="numeric">${money.format(sale.purchase_total || 0)}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
-          <td class="numeric">${money.format(sale.revenue)}</td>
           <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
           <td>${escapeHtml(sale.comment || "")}</td>
           <td class="action-cell"><button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="9" class="empty">Продаж пока нет</td></tr>`;
 
   document.querySelectorAll("[data-global-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteGlobalSale);
