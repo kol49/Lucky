@@ -506,6 +506,28 @@ tbody tr.selected {
   grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
+.sales-filters {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(220px, 1.2fr) 140px 150px 150px 170px 120px;
+  margin-bottom: 14px;
+}
+
+.sales-filters label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.sales-filters input,
+.sales-filters select,
+.sales-filters button {
+  min-height: 44px;
+  width: 100%;
+}
+
 .supplies-panel,
 .sales-panel {
   border-top: 1px solid var(--line);
@@ -573,6 +595,7 @@ pre {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
+  .sales-filters,
   .sales-page-grid,
   .quick-sale-form {
     grid-template-columns: 1fr;

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260707-sales-markup-percent" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260726-sales-filters" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -150,12 +150,6 @@
             <h1>Продажи товаров</h1>
             <p>Быстрый ввод продаж с датой, количеством и фактической ценой продажи.</p>
           </div>
-          <div class="actions">
-            <input id="salesSearch" placeholder="Поиск по товару, SKU, дате или комментарию" />
-            <select id="salesProductFilter">
-              <option value="">Все товары</option>
-            </select>
-          </div>
         </header>
 
         <section class="panel">
@@ -194,6 +188,48 @@
               <h2>Журнал продаж</h2>
               <p>Здесь видно, когда товар был продан и по какой цене.</p>
             </div>
+          </div>
+          <div class="sales-filters">
+            <label>
+              Поиск
+              <input id="salesSearch" placeholder="Товар, SKU, дата, комментарий" />
+            </label>
+            <label>
+              Товар
+              <select id="salesProductFilter">
+                <option value="">Все товары</option>
+              </select>
+            </label>
+            <label>
+              Период
+              <select id="salesPeriodFilter">
+                <option value="">Все даты</option>
+                <option value="today">Сегодня</option>
+                <option value="7">7 дней</option>
+                <option value="30">30 дней</option>
+                <option value="month">Этот месяц</option>
+              </select>
+            </label>
+            <label>
+              С даты
+              <input type="date" id="salesDateFrom" />
+            </label>
+            <label>
+              По дату
+              <input type="date" id="salesDateTo" />
+            </label>
+            <label>
+              Сортировка
+              <select id="salesSort">
+                <option value="date_desc">Новые сверху</option>
+                <option value="date_asc">Старые сверху</option>
+                <option value="product_asc">По товару</option>
+                <option value="quantity_desc">По количеству</option>
+                <option value="profit_desc">По разнице</option>
+                <option value="markup_desc">По наценке</option>
+              </select>
+            </label>
+            <button type="button" id="salesResetFilters">Сбросить</button>
           </div>
           <table>
             <thead>
@@ -373,6 +409,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260707-sales-markup-percent"></script>
+    <script src="/static/app.js?v=20260726-sales-filters"></script>
   </body>
 </html>

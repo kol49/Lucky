@@ -75,6 +75,17 @@ function bindActions() {
   document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
   document.getElementById("salesSearch").addEventListener("input", renderSalesPage);
   document.getElementById("salesProductFilter").addEventListener("change", renderSalesPage);
+  document.getElementById("salesDateFrom").addEventListener("change", () => {
+    document.getElementById("salesPeriodFilter").value = "";
+    renderSalesPage();
+  });
+  document.getElementById("salesDateTo").addEventListener("change", () => {
+    document.getElementById("salesPeriodFilter").value = "";
+    renderSalesPage();
+  });
+  document.getElementById("salesPeriodFilter").addEventListener("change", applySalesPeriodFilter);
+  document.getElementById("salesSort").addEventListener("change", renderSalesPage);
+  document.getElementById("salesResetFilters").addEventListener("click", resetSalesFilters);
   document.querySelector("[name='expense_date']").valueAsDate = new Date();
   document.querySelector("#variableExpenseForm [name='expense_date']").valueAsDate = new Date();
   document.querySelector("[name='supply_date']").valueAsDate = new Date();
@@ -374,10 +385,22 @@ function renderSalesPage() {
 
   const query = document.getElementById("salesSearch").value.trim().toLowerCase();
   const filterProductId = productFilter.value;
+  const dateFrom = document.getElementById("salesDateFrom").value;
+  const dateTo = document.getElementById("salesDateTo").value;
+  const sortMode = document.getElementById("salesSort").value;
   const filteredSales = sales.filter((sale) => {
     const matchesProduct = !filterProductId || String(sale.product_id) === String(filterProductId);
     const haystack = `${sale.sale_date} ${sale.product_name} ${sale.product_sku} ${sale.unit_price} ${sale.comment}`.toLowerCase();
-    return matchesProduct && (!query || haystack.includes(query));
+    const matchesDateFrom = !dateFrom || sale.sale_date >= dateFrom;
+    const matchesDateTo = !dateTo || sale.sale_date <= dateTo;
+    return matchesProduct && matchesDateFrom && matchesDateTo && (!query || haystack.includes(query));
+  }).sort((left, right) => {
+    if (sortMode === "date_asc") return left.sale_date.localeCompare(right.sale_date) || left.id - right.id;
+    if (sortMode === "product_asc") return left.product_name.localeCompare(right.product_name, "uk") || left.sale_date.localeCompare(right.sale_date);
+    if (sortMode === "quantity_desc") return Number(right.quantity || 0) - Number(left.quantity || 0);
+    if (sortMode === "profit_desc") return Number(right.profit || 0) - Number(left.profit || 0);
+    if (sortMode === "markup_desc") return Number(right.markup_percent || 0) - Number(left.markup_percent || 0);
+    return right.sale_date.localeCompare(left.sale_date) || right.id - left.id;
   });
 
   const totalQuantity = filteredSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
@@ -597,6 +620,48 @@ async function deleteGlobalSale(event) {
   if (!confirmed) return;
   await fetchJson(`/api/sales/${saleId}`, { method: "DELETE" });
   await loadState(selectedProduct?.id);
+}
+
+function isoDate(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function applySalesPeriodFilter() {
+  const value = document.getElementById("salesPeriodFilter").value;
+  const from = document.getElementById("salesDateFrom");
+  const to = document.getElementById("salesDateTo");
+  const today = new Date();
+  const start = new Date(today);
+
+  if (!value) {
+    from.value = "";
+    to.value = "";
+  } else if (value === "today") {
+    from.value = isoDate(today);
+    to.value = isoDate(today);
+  } else if (value === "month") {
+    start.setDate(1);
+    from.value = isoDate(start);
+    to.value = isoDate(today);
+  } else {
+    start.setDate(today.getDate() - Number(value) + 1);
+    from.value = isoDate(start);
+    to.value = isoDate(today);
+  }
+  renderSalesPage();
+}
+
+function resetSalesFilters() {
+  document.getElementById("salesSearch").value = "";
+  document.getElementById("salesProductFilter").value = "";
+  document.getElementById("salesPeriodFilter").value = "";
+  document.getElementById("salesDateFrom").value = "";
+  document.getElementById("salesDateTo").value = "";
+  document.getElementById("salesSort").value = "date_desc";
+  renderSalesPage();
 }
 
 function renderAnalytics() {
