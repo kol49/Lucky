@@ -498,6 +498,7 @@ def _product_detail(product: Product) -> dict[str, Any]:
     sales = sorted(product.sales, key=lambda sale: (sale.sale_date, sale.id), reverse=True)
     supply_summary = calculate_supply_summary(product, supplies)
     sales_summary = calculate_sales_summary(product, sales)
+    sale_costs = _sale_cost_map(product)
     payload.update(
         {
             "subcategory": product.subcategory,
@@ -521,7 +522,10 @@ def _product_detail(product: Product) -> dict[str, Any]:
             "supply_summary": asdict(supply_summary),
             "supplies": [_supply_dict(supply) for supply in supplies],
             "sales_summary": asdict(sales_summary),
-            "sales": [_sale_dict(sale, product.sale_price) for sale in sales],
+            "sales": [
+                _sale_dict(sale, product.sale_price, sale_costs.get(sale.id, product.purchase_price * sale.quantity))
+                for sale in sales
+            ],
         }
     )
     return payload
@@ -579,11 +583,44 @@ def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
     }
 
 
-def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_price: float = 0.0) -> dict[str, Any]:
+def _sale_cost_map(product: Product) -> dict[int, float]:
+    supplies = sorted(product.supplies, key=lambda supply: (supply.supply_date, supply.id or 0))
+    sales = sorted(product.sales, key=lambda sale: (sale.sale_date, sale.id or 0))
+    supply_index = 0
+    lots: list[list[float]] = []
+    sale_costs: dict[int, float] = {}
+
+    for sale in sales:
+        while supply_index < len(supplies) and supplies[supply_index].supply_date <= sale.sale_date:
+            supply = supplies[supply_index]
+            quantity = max(supply.quantity, 0)
+            if quantity:
+                lots.append([float(quantity), max(supply.unit_purchase_price, 0.0)])
+            supply_index += 1
+
+        remaining = max(sale.quantity, 0)
+        purchase_total = 0.0
+        for lot in lots:
+            if remaining <= 0:
+                break
+            used_quantity = min(remaining, lot[0])
+            purchase_total += used_quantity * lot[1]
+            lot[0] -= used_quantity
+            remaining -= used_quantity
+
+        if remaining:
+            purchase_total += remaining * max(product.purchase_price, 0.0)
+
+        sale_costs[sale.id] = round(purchase_total, 2)
+
+    return sale_costs
+
+
+def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_total: float = 0.0) -> dict[str, Any]:
     discount_percent = 0.0
     if base_sale_price:
         discount_percent = max((base_sale_price - sale.unit_price) / base_sale_price * 100, 0)
-    purchase_total = purchase_price * sale.quantity
+    purchase_price = (purchase_total / sale.quantity) if sale.quantity else 0.0
     profit = sale.revenue - purchase_total
     markup_percent = (profit / purchase_total * 100) if purchase_total else 0.0
     return {
@@ -601,8 +638,10 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_price: float =
     }
 
 
-def _sale_with_product_dict(sale: SaleRecord, product: Product) -> dict[str, Any]:
-    payload = _sale_dict(sale, product.sale_price, product.purchase_price)
+def _sale_with_product_dict(sale: SaleRecord, product: Product, purchase_total: float | None = None) -> dict[str, Any]:
+    if purchase_total is None:
+        purchase_total = _sale_cost_map(product).get(sale.id, product.purchase_price * sale.quantity)
+    payload = _sale_dict(sale, product.sale_price, purchase_total)
     payload.update(
         {
             "product_id": product.id,
@@ -620,7 +659,15 @@ def _all_sales(session) -> list[dict[str, Any]]:
         .join(Product, SaleRecord.product_id == Product.id)
         .order_by(SaleRecord.sale_date.desc(), SaleRecord.id.desc())
     )
-    return [_sale_with_product_dict(sale, product) for sale, product in rows]
+    cost_cache: dict[int, dict[int, float]] = {}
+    payload = []
+    for sale, product in rows:
+        if product.id not in cost_cache:
+            cost_cache[product.id] = _sale_cost_map(product)
+        payload.append(
+            _sale_with_product_dict(sale, product, cost_cache[product.id].get(sale.id, product.purchase_price * sale.quantity))
+        )
+    return payload
 
 
 def _month_key(value: date) -> str:
@@ -647,9 +694,12 @@ def _monthly_stats(session) -> list[dict[str, Any]]:
         return months[month]
 
     sale_rows = session.execute(select(SaleRecord, Product).join(Product, SaleRecord.product_id == Product.id))
+    cost_cache: dict[int, dict[int, float]] = {}
     for sale, product in sale_rows:
         row = row_for(_month_key(sale.sale_date))
-        purchase_cost = product.purchase_price * sale.quantity
+        if product.id not in cost_cache:
+            cost_cache[product.id] = _sale_cost_map(product)
+        purchase_cost = cost_cache[product.id].get(sale.id, product.purchase_price * sale.quantity)
         row["sales_count"] += 1
         row["quantity"] += sale.quantity
         row["revenue"] += sale.revenue
@@ -679,7 +729,6 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
     total_profit = 0.0
     total_invested = 0.0
     for product in products:
-        economics = _economics(product)
         sales = list(product.sales)
         sold_quantity = sum(sale.quantity for sale in sales)
         supply_summary = calculate_supply_summary(product)
@@ -688,7 +737,23 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
             invested = (product.stock + sold_quantity) * product.purchase_price
         revenue = sum(sale.revenue for sale in sales)
         quantity = sold_quantity
-        profit = sum((sale.unit_price - economics.full_cost_per_unit) * sale.quantity for sale in sales)
+        sale_costs = _sale_cost_map(product)
+        fixed_cost_per_unit = product.fixed_cost_allocation / max(product.expected_monthly_sales, 1)
+        extra_cost_per_unit = sum(
+            [
+                product.logistics,
+                product.marketplace_fee,
+                product.advertising,
+                product.packaging,
+                product.taxes,
+                product.other_costs,
+                fixed_cost_per_unit,
+            ]
+        )
+        profit = sum(
+            sale.revenue - sale_costs.get(sale.id, product.purchase_price * sale.quantity) - extra_cost_per_unit * sale.quantity
+            for sale in sales
+        )
         total_profit += profit
         total_invested += invested
         quantities = list(
