@@ -2,6 +2,7 @@ const money = new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH
 let state = {};
 let selectedProduct = null;
 let productSort = { key: "sku", direction: "asc" };
+let editingSaleId = null;
 
 const fields = [
   ["name", "Название", "text"],
@@ -73,6 +74,7 @@ function bindActions() {
   document.getElementById("saleForm").addEventListener("submit", addSale);
   document.getElementById("quickSaleForm").addEventListener("submit", addQuickSale);
   document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
+  document.getElementById("cancelSaleEdit").addEventListener("click", cancelSaleEdit);
   document.getElementById("salesSearch").addEventListener("input", renderSalesPage);
   document.getElementById("salesProductFilter").addEventListener("change", renderSalesPage);
   document.getElementById("salesDateFrom").addEventListener("change", () => {
@@ -430,11 +432,17 @@ function renderSalesPage() {
           <td class="numeric ${Number(sale.profit || 0) >= 0 ? "positive" : "negative"}">${money.format(sale.profit || 0)}</td>
           <td class="numeric ${Number(sale.markup_percent || 0) >= 0 ? "positive" : "negative"}">${Number(sale.markup_percent || 0).toFixed(1)}%</td>
           <td>${escapeHtml(sale.comment || "")}</td>
-          <td class="action-cell"><button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
+          <td class="action-cell">
+            <button class="icon-button" data-edit-sale-id="${sale.id}" title="Редактировать продажу">Изменить</button>
+            <button class="danger icon-button" data-global-sale-id="${sale.id}" title="Удалить продажу">Удалить</button>
+          </td>
         </tr>`,
     )
     .join("") : `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
 
+  document.querySelectorAll("[data-edit-sale-id]").forEach((button) => {
+    button.addEventListener("click", startSaleEdit);
+  });
   document.querySelectorAll("[data-global-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteGlobalSale);
   });
@@ -591,18 +599,50 @@ async function addQuickSale(event) {
   payload.product_id = Number(payload.product_id || 0);
   payload.quantity = Number(payload.quantity || 0);
   payload.unit_price = Number(payload.unit_price || 0);
-  await fetchJson("/api/sales", {
-    method: "POST",
+  await fetchJson(editingSaleId ? `/api/sales/${editingSaleId}` : "/api/sales", {
+    method: editingSaleId ? "PUT" : "POST",
     body: JSON.stringify(payload),
   });
 
   const productId = payload.product_id;
+  editingSaleId = null;
   form.reset();
   form.querySelector("[name='sale_date']").valueAsDate = new Date();
   form.querySelector("[name='quantity']").value = 1;
   document.getElementById("quickSaleProduct").value = String(productId);
+  document.getElementById("quickSaleSubmit").textContent = "Добавить продажу";
+  document.getElementById("cancelSaleEdit").classList.add("hidden");
   fillQuickSalePrice();
   await loadState(selectedProduct?.id);
+}
+
+function startSaleEdit(event) {
+  const saleId = Number(event.currentTarget.dataset.editSaleId);
+  const sale = (state.sales || []).find((item) => Number(item.id) === saleId);
+  if (!sale) return;
+  editingSaleId = saleId;
+  const form = document.getElementById("quickSaleForm");
+  form.querySelector("[name='product_id']").value = String(sale.product_id);
+  form.querySelector("[name='sale_date']").value = sale.sale_date;
+  form.querySelector("[name='quantity']").value = sale.quantity;
+  form.querySelector("[name='unit_price']").value = sale.unit_price;
+  form.querySelector("[name='comment']").value = sale.comment || "";
+  document.getElementById("quickSaleSubmit").textContent = "Сохранить продажу";
+  document.getElementById("cancelSaleEdit").classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelSaleEdit() {
+  editingSaleId = null;
+  const form = document.getElementById("quickSaleForm");
+  const productId = document.getElementById("quickSaleProduct").value;
+  form.reset();
+  form.querySelector("[name='sale_date']").valueAsDate = new Date();
+  form.querySelector("[name='quantity']").value = 1;
+  document.getElementById("quickSaleProduct").value = productId;
+  document.getElementById("quickSaleSubmit").textContent = "Добавить продажу";
+  document.getElementById("cancelSaleEdit").classList.add("hidden");
+  fillQuickSalePrice();
 }
 
 async function deleteSale(event) {
@@ -619,6 +659,7 @@ async function deleteGlobalSale(event) {
   const confirmed = window.confirm("Удалить эту продажу из журнала?");
   if (!confirmed) return;
   await fetchJson(`/api/sales/${saleId}`, { method: "DELETE" });
+  if (Number(saleId) === editingSaleId) cancelSaleEdit();
   await loadState(selectedProduct?.id);
 }
 

@@ -17,6 +17,13 @@ add_action('rest_api_init', function () {
     ]);
 });
 
+add_action('woocommerce_checkout_order_processed', 'profitmap_stock_sync_send_order_sale', 20, 1);
+add_action('woocommerce_order_status_processing', 'profitmap_stock_sync_send_order_sale', 20, 1);
+add_action('woocommerce_order_status_completed', 'profitmap_stock_sync_send_order_sale', 20, 1);
+add_action('woocommerce_order_status_cancelled', 'profitmap_stock_sync_send_order_sale', 20, 1);
+add_action('woocommerce_order_status_refunded', 'profitmap_stock_sync_send_order_sale', 20, 1);
+add_action('woocommerce_order_status_failed', 'profitmap_stock_sync_send_order_sale', 20, 1);
+
 function profitmap_stock_sync_authorize(WP_REST_Request $request): bool
 {
     $token = defined('PROFITMAP_STOCK_SYNC_TOKEN') ? (string) PROFITMAP_STOCK_SYNC_TOKEN : (string) getenv('PROFITMAP_STOCK_SYNC_TOKEN');
@@ -116,4 +123,71 @@ function profitmap_stock_sync_base_sku(string $sku): string
     $parts = preg_split('/[\s(#]/u', $sku, 2);
     $base_sku = is_array($parts) && isset($parts[0]) ? trim($parts[0]) : $sku;
     return $base_sku !== '' ? $base_sku : $sku;
+}
+
+function profitmap_stock_sync_send_order_sale($order_id): void
+{
+    if (!function_exists('wc_get_order')) {
+        return;
+    }
+
+    $url = defined('PROFITMAP_SALES_SYNC_URL') ? (string) PROFITMAP_SALES_SYNC_URL : (string) getenv('PROFITMAP_SALES_SYNC_URL');
+    $token = defined('PROFITMAP_SALES_SYNC_TOKEN') ? (string) PROFITMAP_SALES_SYNC_TOKEN : (string) getenv('PROFITMAP_SALES_SYNC_TOKEN');
+    if ($url === '' || $token === '') {
+        return;
+    }
+
+    $order = wc_get_order($order_id);
+    if (!$order) {
+        return;
+    }
+
+    $items = [];
+    foreach ($order->get_items('line_item') as $item_id => $item) {
+        $product = $item->get_product();
+        if (!$product) {
+            continue;
+        }
+        $sku = $product->get_sku();
+        if ($sku === '' && $product->get_parent_id()) {
+            $parent = wc_get_product($product->get_parent_id());
+            $sku = $parent ? $parent->get_sku() : '';
+        }
+        if ($sku === '') {
+            continue;
+        }
+
+        $quantity = max(0, (int) $item->get_quantity());
+        if (!$quantity) {
+            continue;
+        }
+
+        $line_total = (float) $item->get_total();
+        $items[] = [
+            'sku' => $sku,
+            'quantity' => $quantity,
+            'unit_price' => round($line_total / $quantity, 2),
+            'name' => $item->get_name(),
+            'external_id' => $order->get_id() . ':' . $item_id,
+        ];
+    }
+
+    $created = $order->get_date_created();
+    $payload = [
+        'order_id' => (string) $order->get_id(),
+        'order_number' => (string) $order->get_order_number(),
+        'status' => $order->get_status(),
+        'sale_date' => $created ? $created->date('Y-m-d') : gmdate('Y-m-d'),
+        'items' => $items,
+    ];
+
+    wp_remote_post($url, [
+        'timeout' => 8,
+        'headers' => [
+            'Authorization' => 'Bearer ' . $token,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ],
+        'body' => wp_json_encode($payload),
+    ]);
 }

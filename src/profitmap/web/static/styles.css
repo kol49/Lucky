@@ -481,7 +481,7 @@ tbody tr.selected {
 .quick-sale-form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.4fr) 150px 120px 150px minmax(180px, 1fr) 160px;
+  grid-template-columns: minmax(220px, 1.4fr) 150px 120px 150px minmax(180px, 1fr) 160px 110px;
 }
 
 .quick-sale-form label {
@@ -498,6 +498,10 @@ tbody tr.selected {
 .quick-sale-form input,
 .quick-sale-form select {
   width: 100%;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .sales-page-summary {

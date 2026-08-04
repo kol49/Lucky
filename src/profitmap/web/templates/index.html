@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260804-remaining-cost-pricing" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260804-store-sales-edit" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
@@ -175,7 +175,8 @@
                 Комментарий
                 <input name="comment" placeholder="Скидка, акция, клиент" />
               </label>
-              <button type="submit">Добавить продажу</button>
+              <button type="submit" id="quickSaleSubmit">Добавить продажу</button>
+              <button type="button" id="cancelSaleEdit" class="secondary hidden">Отмена</button>
             </form>
 
             <div class="sales-page-summary" id="salesPageSummary"></div>
@@ -409,6 +410,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260804-remaining-cost-pricing"></script>
+    <script src="/static/app.js?v=20260804-store-sales-edit"></script>
   </body>
 </html>

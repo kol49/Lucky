@@ -105,6 +105,22 @@ class GlobalSalePayload(SalePayload):
     product_id: int
 
 
+class StoreSaleItemPayload(BaseModel):
+    sku: str
+    quantity: int
+    unit_price: float
+    name: str = ""
+    external_id: str = ""
+
+
+class StoreSalePayload(BaseModel):
+    order_id: str
+    order_number: str = ""
+    status: str = ""
+    sale_date: date | None = None
+    items: list[StoreSaleItemPayload]
+
+
 class AllocationPayload(BaseModel):
     method: str
 
@@ -351,6 +367,88 @@ def create_global_sale(payload: GlobalSalePayload) -> dict[str, Any]:
         return _sale_with_product_dict(sale, product)
 
 
+@app.put("/api/sales/{sale_id}")
+def update_global_sale(sale_id: int, payload: GlobalSalePayload) -> dict[str, Any]:
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if payload.unit_price < 0:
+        raise HTTPException(status_code=400, detail="Sale price cannot be negative")
+    with SessionFactory() as session:
+        sale = session.get(SaleRecord, sale_id)
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        old_product = sale.product
+        product = session.get(Product, payload.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        sale.product_id = product.id
+        sale.sale_date = payload.sale_date
+        sale.quantity = payload.quantity
+        sale.unit_price = payload.unit_price
+        sale.revenue = round(payload.quantity * payload.unit_price, 2)
+        sale.comment = payload.comment
+        session.flush()
+        refresh_product_from_supplies(session, old_product)
+        if old_product.id != product.id:
+            refresh_product_from_supplies(session, product)
+        session.commit()
+        _sync_product_stock(session, old_product)
+        if old_product.id != product.id:
+            _sync_product_stock(session, product)
+        return _sale_with_product_dict(sale, product)
+
+
+@app.post("/api/store-sales")
+def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str, Any]:
+    _require_store_sales_token(request)
+    order_id = str(payload.order_id).strip()
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Order ID is required")
+    with SessionFactory() as session:
+        if payload.status in {"cancelled", "canceled", "refunded", "failed", "trash"}:
+            deleted, touched_products = _delete_store_order_sales(session, order_id)
+            session.commit()
+            for product in touched_products:
+                _sync_product_stock(session, product)
+            return {"ok": True, "deleted": deleted, "updated": [], "missing": []}
+
+        updated = []
+        missing = []
+        touched_products: dict[int, Product] = {}
+        for item in payload.items:
+            if item.quantity <= 0 or item.unit_price < 0:
+                continue
+            product = _find_product_for_store_sku(session, item.sku)
+            if not product:
+                missing.append(item.sku)
+                continue
+            external_id = item.external_id or f"{order_id}:{item.sku}"
+            sale = session.scalar(
+                select(SaleRecord).where(SaleRecord.external_source == "woocommerce", SaleRecord.external_id == external_id)
+            )
+            if sale:
+                touched_products[sale.product_id] = sale.product
+            else:
+                sale = SaleRecord(external_source="woocommerce", external_id=external_id)
+                session.add(sale)
+            sale.product_id = product.id
+            sale.sale_date = payload.sale_date or date.today()
+            sale.quantity = item.quantity
+            sale.unit_price = item.unit_price
+            sale.revenue = round(item.quantity * item.unit_price, 2)
+            sale.comment = f"Сайт заказ №{payload.order_number or order_id} · {payload.status}".strip()
+            touched_products[product.id] = product
+            updated.append({"sku": item.sku, "product_id": product.id, "quantity": item.quantity})
+
+        session.flush()
+        for product in touched_products.values():
+            refresh_product_from_supplies(session, product)
+        session.commit()
+        for product in touched_products.values():
+            _sync_product_stock(session, product)
+        return {"ok": True, "updated": updated, "missing": missing, "deleted": 0}
+
+
 @app.delete("/api/sales/{sale_id}")
 def delete_global_sale(sale_id: int) -> dict[str, str]:
     with SessionFactory() as session:
@@ -505,6 +603,56 @@ def _sync_deleted_product_stock(session, sku: str, deleted_product_id: int) -> d
     if related_products:
         return sync_products_to_store(related_products)
     return sync_stock_items_to_store([{"sku": _store_sync_base_sku(sku), "stock": 0}])
+
+
+def _find_product_for_store_sku(session, sku: str) -> Product | None:
+    sku = (sku or "").strip()
+    if not sku:
+        return None
+    product = session.scalar(select(Product).where(Product.sku == sku))
+    if product:
+        return product
+
+    base_sku = _store_sync_base_sku(sku)
+    candidates = _related_products_for_store_sync(session, base_sku)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-_product_remaining_stock(item), item.sku))
+    return candidates[0]
+
+
+def _product_remaining_stock(product: Product) -> int:
+    supplied_quantity = sum(max(supply.quantity, 0) for supply in product.supplies)
+    if supplied_quantity:
+        return calculate_supply_summary(product).remaining_quantity
+    return max(product.stock, 0)
+
+
+def _delete_store_order_sales(session, order_id: str) -> tuple[int, list[Product]]:
+    sales = list(
+        session.scalars(
+            select(SaleRecord).where(
+                SaleRecord.external_source == "woocommerce",
+                SaleRecord.external_id.like(f"{order_id}:%"),
+            )
+        )
+    )
+    touched_products = []
+    for sale in sales:
+        touched_products.append(sale.product)
+        session.delete(sale)
+    session.flush()
+    for product in touched_products:
+        refresh_product_from_supplies(session, product)
+    return len(sales), touched_products
+
+
+def _require_store_sales_token(request: Request) -> None:
+    expected_token = os.getenv("STORE_SALES_SYNC_TOKEN") or os.getenv("STORE_STOCK_SYNC_TOKEN", "")
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if not expected_token or scheme.lower() != "bearer" or not hmac.compare_digest(token.strip(), expected_token):
+        raise HTTPException(status_code=401, detail="Invalid store sales token")
 
 
 def _related_products_for_store_sync(session, sku: str) -> list[Product]:
@@ -686,6 +834,8 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_total: float =
         "markup_percent": round(markup_percent, 1),
         "discount_percent": round(discount_percent, 1),
         "comment": sale.comment,
+        "external_source": sale.external_source,
+        "external_id": sale.external_id,
     }
 
 
@@ -852,7 +1002,7 @@ def _analytics(session, products: list[Product]) -> dict[str, Any]:
 
 
 def _is_public_path(path: str) -> bool:
-    return path in {"/login", "/favicon.ico"} or path.startswith("/static/")
+    return path in {"/login", "/favicon.ico", "/api/store-sales"} or path.startswith("/static/")
 
 
 def _client_ip(request: Request) -> str:
