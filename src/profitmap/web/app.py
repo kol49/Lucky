@@ -27,6 +27,7 @@ from profitmap.services.coefficients import build_profit_coefficients
 from profitmap.services.demand import forecast_demand
 from profitmap.services.inventory import calculate_supply_summary, refresh_product_from_supplies
 from profitmap.services.sales import calculate_sales_summary
+from profitmap.services.store_sync import sync_product_to_store, sync_products_to_store, sync_stock_items_to_store
 from profitmap.services.unit_economics import UnitEconomicsInput, calculate_unit_economics
 
 load_dotenv()
@@ -215,6 +216,7 @@ def create_product(payload: ProductPayload) -> dict[str, Any]:
             product.sku = f"WEB-{count + 1:03d}"
         session.add(product)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
 
 
@@ -228,6 +230,7 @@ def update_product(product_id: int, payload: ProductPayload) -> dict[str, Any]:
             setattr(product, key, value)
         refresh_product_from_supplies(session, product)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
 
 
@@ -237,8 +240,10 @@ def delete_product(product_id: int) -> dict[str, str]:
         product = session.get(Product, product_id)
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        sku = product.sku
         session.delete(product)
         session.commit()
+        _sync_deleted_product_stock(sku)
         return {"status": "deleted"}
 
 
@@ -264,6 +269,7 @@ def create_supply(product_id: int, payload: SupplyPayload) -> dict[str, Any]:
         session.flush()
         refresh_product_from_supplies(session, product)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
 
 
@@ -281,6 +287,7 @@ def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
         session.flush()
         refresh_product_from_supplies(session, product, fallback_stock_delta=-quantity)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
 
 
@@ -306,6 +313,7 @@ def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
         session.flush()
         refresh_product_from_supplies(session, product, fallback_stock_delta=-payload.quantity)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
 
 
@@ -337,6 +345,7 @@ def create_global_sale(payload: GlobalSalePayload) -> dict[str, Any]:
         session.flush()
         refresh_product_from_supplies(session, product, fallback_stock_delta=-payload.quantity)
         session.commit()
+        _sync_product_stock(product)
         return _sale_with_product_dict(sale, product)
 
 
@@ -352,6 +361,7 @@ def delete_global_sale(sale_id: int) -> dict[str, str]:
         session.flush()
         refresh_product_from_supplies(session, product, fallback_stock_delta=quantity)
         session.commit()
+        _sync_product_stock(product)
         return {"status": "deleted"}
 
 
@@ -369,7 +379,15 @@ def delete_sale(product_id: int, sale_id: int) -> dict[str, Any]:
         session.flush()
         refresh_product_from_supplies(session, product, fallback_stock_delta=quantity)
         session.commit()
+        _sync_product_stock(product)
         return _product_detail(product)
+
+
+@app.post("/api/store-sync")
+def sync_store_stock() -> dict[str, Any]:
+    with SessionFactory() as session:
+        products = list(session.scalars(select(Product).order_by(Product.name)))
+        return sync_products_to_store(products)
 
 
 @app.get("/api/expenses")
@@ -467,6 +485,17 @@ def analyze() -> dict[str, str]:
         products = list(session.scalars(select(Product)))
         total_fixed = float(session.scalar(select(func.coalesce(func.sum(FixedExpense.amount), 0))) or 0)
         return {"text": analyze_business(products, total_fixed)}
+
+
+def _sync_product_stock(product: Product) -> dict[str, Any]:
+    return sync_product_to_store(product)
+
+
+def _sync_deleted_product_stock(sku: str) -> dict[str, Any]:
+    sku = (sku or "").strip()
+    if not sku:
+        return {"ok": True, "skipped": "empty_sku"}
+    return sync_stock_items_to_store([{"sku": sku, "stock": 0}])
 
 
 def _product_summary(product: Product) -> dict[str, Any]:
