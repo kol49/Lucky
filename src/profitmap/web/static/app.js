@@ -304,7 +304,7 @@ function renderSupplies() {
   if (!selectedProduct) return;
   const summary = selectedProduct.supply_summary || {};
   document.getElementById("supplySummary").textContent =
-    `Всего поставлено: ${summary.total_quantity || 0} шт. · Средняя закупка: ${money.format(summary.average_purchase_price || selectedProduct.purchase_price || 0)} · Рекомендуемая цена: ${money.format(summary.recommended_price || 0)}`;
+    `Всего поставлено: ${summary.total_quantity || 0} шт. · Остаток: ${summary.remaining_quantity || 0} шт. · Средняя закупка остатка: ${money.format(summary.average_purchase_price || selectedProduct.purchase_price || 0)} · Рекомендуемая цена: ${money.format(summary.recommended_price || 0)}`;
 
   const supplies = selectedProduct.supplies || [];
   document.getElementById("suppliesTable").innerHTML = supplies.length ? supplies

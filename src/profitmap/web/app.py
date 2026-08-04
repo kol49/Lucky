@@ -470,7 +470,8 @@ def analyze() -> dict[str, str]:
 
 
 def _product_summary(product: Product) -> dict[str, Any]:
-    economics = _economics(product)
+    supply_summary = calculate_supply_summary(product)
+    economics = _economics(product, supply_summary.average_purchase_price)
     supplied_quantity = sum(max(supply.quantity, 0) for supply in product.supplies)
     sold_quantity = sum(max(sale.quantity, 0) for sale in product.sales)
     return {
@@ -479,10 +480,10 @@ def _product_summary(product: Product) -> dict[str, Any]:
         "name": product.name,
         "category": product.category,
         "product_class": product.product_class,
-        "stock": product.stock,
+        "stock": supply_summary.remaining_quantity if supplied_quantity else product.stock,
         "supplied_quantity": supplied_quantity,
         "sold_quantity": sold_quantity,
-        "purchase_price": product.purchase_price,
+        "purchase_price": supply_summary.average_purchase_price,
         "sale_price": product.sale_price,
         "profit_per_unit": economics.net_profit_per_unit,
         "margin_percent": economics.margin_percent,
@@ -492,11 +493,11 @@ def _product_summary(product: Product) -> dict[str, Any]:
 
 
 def _product_detail(product: Product) -> dict[str, Any]:
-    payload = _product_summary(product)
-    economics = _economics(product)
     supplies = sorted(product.supplies, key=lambda supply: (supply.supply_date, supply.id), reverse=True)
     sales = sorted(product.sales, key=lambda sale: (sale.sale_date, sale.id), reverse=True)
     supply_summary = calculate_supply_summary(product, supplies)
+    payload = _product_summary(product)
+    economics = _economics(product, supply_summary.average_purchase_price)
     sales_summary = calculate_sales_summary(product, sales)
     sale_costs = _sale_cost_map(product)
     payload.update(
@@ -531,10 +532,10 @@ def _product_detail(product: Product) -> dict[str, Any]:
     return payload
 
 
-def _economics(product: Product):
+def _economics(product: Product, purchase_price: float | None = None):
     return calculate_unit_economics(
         UnitEconomicsInput(
-            purchase_price=product.purchase_price,
+            purchase_price=product.purchase_price if purchase_price is None else purchase_price,
             sale_price=product.sale_price,
             logistics=product.logistics,
             marketplace_fee=product.marketplace_fee,
