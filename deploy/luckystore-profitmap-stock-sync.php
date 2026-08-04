@@ -46,6 +46,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
     $updated = [];
     $missing = [];
     $invalid = [];
+    $stock_by_product_id = [];
 
     foreach ($items as $item) {
         $sku = isset($item['sku']) ? wc_clean((string) $item['sku']) : '';
@@ -56,17 +57,38 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
 
         $stock = max(0, (int) ($item['stock'] ?? 0));
         $product_id = wc_get_product_id_by_sku($sku);
+        $matched_sku = $sku;
         if (!$product_id) {
-            $missing[] = $sku;
-            continue;
+            $base_sku = profitmap_stock_sync_base_sku($sku);
+            if ($base_sku !== $sku) {
+                $product_id = wc_get_product_id_by_sku($base_sku);
+                $matched_sku = $base_sku;
+            }
+            if (!$product_id) {
+                $missing[] = $sku;
+                continue;
+            }
         }
 
+        if (!isset($stock_by_product_id[$product_id])) {
+            $stock_by_product_id[$product_id] = [
+                'stock' => 0,
+                'matched_sku' => $matched_sku,
+                'source_skus' => [],
+            ];
+        }
+        $stock_by_product_id[$product_id]['stock'] += $stock;
+        $stock_by_product_id[$product_id]['source_skus'][] = $sku;
+    }
+
+    foreach ($stock_by_product_id as $product_id => $row) {
         $product = wc_get_product($product_id);
         if (!$product) {
-            $missing[] = $sku;
+            $missing = array_merge($missing, $row['source_skus']);
             continue;
         }
 
+        $stock = max(0, (int) $row['stock']);
         $product->set_manage_stock(true);
         $product->set_stock_quantity($stock);
         $product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
@@ -74,9 +96,10 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
         wc_delete_product_transients($product_id);
 
         $updated[] = [
-            'sku' => $sku,
+            'sku' => $row['matched_sku'],
             'product_id' => $product_id,
             'stock' => $stock,
+            'source_skus' => $row['source_skus'],
         ];
     }
 
@@ -86,4 +109,11 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
         'missing' => $missing,
         'invalid_count' => count($invalid),
     ]);
+}
+
+function profitmap_stock_sync_base_sku(string $sku): string
+{
+    $parts = preg_split('/[\s(#]/u', $sku, 2);
+    $base_sku = is_array($parts) && isset($parts[0]) ? trim($parts[0]) : $sku;
+    return $base_sku !== '' ? $base_sku : $sku;
 }
