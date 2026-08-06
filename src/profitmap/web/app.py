@@ -405,12 +405,15 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
     if not order_id:
         raise HTTPException(status_code=400, detail="Order ID is required")
     with SessionFactory() as session:
-        if payload.status in {"cancelled", "canceled", "refunded", "failed", "trash"}:
+        status = payload.status.lower().strip()
+        if status in {"cancelled", "canceled", "refunded", "failed", "trash"}:
             deleted, touched_products = _delete_store_order_sales(session, order_id)
             session.commit()
             for product in touched_products:
                 _sync_product_stock(session, product)
             return {"ok": True, "deleted": deleted, "updated": [], "missing": []}
+        if status != "completed":
+            return {"ok": True, "skipped": f"status:{payload.status}", "deleted": 0, "updated": [], "missing": []}
 
         updated = []
         missing = []
