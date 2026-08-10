@@ -17,6 +17,7 @@ add_action('rest_api_init', function () {
     ]);
 });
 
+add_action('woocommerce_order_status_shipped', 'profitmap_stock_sync_send_order_sale', 20, 1);
 add_action('woocommerce_order_status_completed', 'profitmap_stock_sync_send_order_sale', 20, 1);
 add_action('woocommerce_order_status_cancelled', 'profitmap_stock_sync_send_order_sale', 20, 1);
 add_action('woocommerce_order_status_refunded', 'profitmap_stock_sync_send_order_sale', 20, 1);

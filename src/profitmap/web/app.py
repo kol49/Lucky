@@ -412,7 +412,7 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
             for product in touched_products:
                 _sync_product_stock(session, product)
             return {"ok": True, "deleted": deleted, "updated": [], "missing": []}
-        if status != "completed":
+        if status not in {"shipped", "completed"}:
             return {"ok": True, "skipped": f"status:{payload.status}", "deleted": 0, "updated": [], "missing": []}
 
         updated = []
