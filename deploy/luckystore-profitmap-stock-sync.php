@@ -53,7 +53,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
     $updated = [];
     $missing = [];
     $invalid = [];
-    $stock_by_product_id = [];
+    $stock_by_sku = [];
 
     foreach ($items as $item) {
         $sku = isset($item['sku']) ? wc_clean((string) $item['sku']) : '';
@@ -63,51 +63,63 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
         }
 
         $stock = max(0, (int) ($item['stock'] ?? 0));
-        $product_id = wc_get_product_id_by_sku($sku);
         $matched_sku = $sku;
-        if (!$product_id) {
+        $product_ids = profitmap_stock_sync_product_ids_by_sku($sku);
+        if (!$product_ids) {
             $base_sku = profitmap_stock_sync_base_sku($sku);
             if ($base_sku !== $sku) {
-                $product_id = wc_get_product_id_by_sku($base_sku);
+                $product_ids = profitmap_stock_sync_product_ids_by_sku($base_sku);
                 $matched_sku = $base_sku;
             }
-            if (!$product_id) {
+            if (!$product_ids) {
                 $missing[] = $sku;
                 continue;
             }
         }
 
-        if (!isset($stock_by_product_id[$product_id])) {
-            $stock_by_product_id[$product_id] = [
+        if (!isset($stock_by_sku[$matched_sku])) {
+            $stock_by_sku[$matched_sku] = [
                 'stock' => 0,
                 'matched_sku' => $matched_sku,
                 'source_skus' => [],
             ];
         }
-        $stock_by_product_id[$product_id]['stock'] += $stock;
-        $stock_by_product_id[$product_id]['source_skus'][] = $sku;
+        $stock_by_sku[$matched_sku]['stock'] += $stock;
+        $stock_by_sku[$matched_sku]['source_skus'][] = $sku;
     }
 
-    foreach ($stock_by_product_id as $product_id => $row) {
-        $product = wc_get_product($product_id);
-        if (!$product) {
+    foreach ($stock_by_sku as $row) {
+        $product_ids = profitmap_stock_sync_product_ids_by_sku($row['matched_sku']);
+        if (!$product_ids) {
             $missing = array_merge($missing, $row['source_skus']);
             continue;
         }
 
-        $stock = max(0, (int) $row['stock']);
-        $product->set_manage_stock(true);
-        $product->set_stock_quantity($stock);
-        $product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
-        $product->save();
-        wc_delete_product_transients($product_id);
+        $unit_stock = max(0, (int) $row['stock']);
+        foreach ($product_ids as $product_id) {
+            $product = wc_get_product($product_id);
+            if (!$product) {
+                $missing = array_merge($missing, $row['source_skus']);
+                continue;
+            }
 
-        $updated[] = [
-            'sku' => $row['matched_sku'],
-            'product_id' => $product_id,
-            'stock' => $stock,
-            'source_skus' => $row['source_skus'],
-        ];
+            $pack_multiplier = profitmap_stock_sync_product_pack_multiplier($product);
+            $stock = intdiv($unit_stock, $pack_multiplier);
+            $product->set_manage_stock(true);
+            $product->set_stock_quantity($stock);
+            $product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
+            $product->save();
+            wc_delete_product_transients($product_id);
+
+            $updated[] = [
+                'sku' => $row['matched_sku'],
+                'product_id' => $product_id,
+                'stock' => $stock,
+                'unit_stock' => $unit_stock,
+                'pack_multiplier' => $pack_multiplier,
+                'source_skus' => $row['source_skus'],
+            ];
+        }
     }
 
     return rest_ensure_response([
@@ -123,6 +135,87 @@ function profitmap_stock_sync_base_sku(string $sku): string
     $parts = preg_split('/[\s(#]/u', $sku, 2);
     $base_sku = is_array($parts) && isset($parts[0]) ? trim($parts[0]) : $sku;
     return $base_sku !== '' ? $base_sku : $sku;
+}
+
+function profitmap_stock_sync_product_ids_by_sku(string $sku): array
+{
+    global $wpdb;
+
+    $sku = trim($sku);
+    if ($sku === '') {
+        return [];
+    }
+
+    $ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT DISTINCT posts.ID
+         FROM {$wpdb->posts} posts
+         INNER JOIN {$wpdb->postmeta} sku_meta ON sku_meta.post_id = posts.ID
+         WHERE sku_meta.meta_key = '_sku'
+           AND sku_meta.meta_value = %s
+           AND posts.post_type IN ('product', 'product_variation')
+           AND posts.post_status NOT IN ('trash', 'auto-draft')
+         ORDER BY posts.post_type = 'product' DESC, posts.ID ASC",
+        $sku
+    ));
+
+    $product_ids = array_values(array_map('intval', $ids ?: []));
+    foreach ($product_ids as $product_id) {
+        $product = wc_get_product($product_id);
+        if ($product && $product->is_type('variable')) {
+            $product_ids = array_merge($product_ids, array_map('intval', $product->get_children()));
+        }
+    }
+
+    return array_values(array_unique($product_ids));
+}
+
+function profitmap_stock_sync_product_pack_multiplier($product): int
+{
+    if (!$product || !method_exists($product, 'get_parent_id') || !$product->get_parent_id()) {
+        return 1;
+    }
+
+    foreach ((array) $product->get_attributes() as $value) {
+        $multiplier = profitmap_stock_sync_parse_pack_multiplier((string) $value);
+        if ($multiplier > 1) {
+            return $multiplier;
+        }
+    }
+
+    return 1;
+}
+
+function profitmap_stock_sync_order_item_pack_multiplier($item, $product): int
+{
+    $multiplier = profitmap_stock_sync_product_pack_multiplier($product);
+    if ($multiplier > 1) {
+        return $multiplier;
+    }
+
+    foreach ($item->get_meta_data() as $meta) {
+        $data = $meta->get_data();
+        foreach (['display_value', 'value'] as $key) {
+            $value = isset($data[$key]) ? $data[$key] : '';
+            if (is_array($value)) {
+                $value = implode(' ', $value);
+            }
+            $multiplier = profitmap_stock_sync_parse_pack_multiplier((string) $value);
+            if ($multiplier > 1) {
+                return $multiplier;
+            }
+        }
+    }
+
+    return 1;
+}
+
+function profitmap_stock_sync_parse_pack_multiplier(string $text): int
+{
+    if (preg_match('/(?<!\d)([1-9]\d*)\s*шт\.?/iu', $text, $matches)) {
+        return max(1, (int) $matches[1]);
+    }
+
+    return 1;
 }
 
 function profitmap_stock_sync_send_order_sale($order_id): void
@@ -157,16 +250,18 @@ function profitmap_stock_sync_send_order_sale($order_id): void
             continue;
         }
 
-        $quantity = max(0, (int) $item->get_quantity());
-        if (!$quantity) {
+        $ordered_quantity = max(0, (int) $item->get_quantity());
+        if (!$ordered_quantity) {
             continue;
         }
 
+        $pack_multiplier = profitmap_stock_sync_order_item_pack_multiplier($item, $product);
+        $quantity = $ordered_quantity * $pack_multiplier;
         $line_total = (float) $item->get_total();
         $items[] = [
             'sku' => $sku,
             'quantity' => $quantity,
-            'unit_price' => round($line_total / $quantity, 2),
+            'unit_price' => round($line_total / $quantity, 4),
             'name' => $item->get_name(),
             'external_id' => $order->get_id() . ':' . $item_id,
         ];
