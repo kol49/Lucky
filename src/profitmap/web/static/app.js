@@ -68,6 +68,7 @@ function bindActions() {
   document.getElementById("newProduct").addEventListener("click", createProduct);
   document.getElementById("runAi").addEventListener("click", runAi);
   document.getElementById("allocateExpenses").addEventListener("click", allocateExpenses);
+  document.getElementById("exportMonthReport").addEventListener("click", () => downloadMonthReport(document.getElementById("exportMonth").value));
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
   document.getElementById("variableExpenseForm").addEventListener("submit", addVariableExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
@@ -707,6 +708,10 @@ function resetSalesFilters() {
 
 function renderAnalytics() {
   const analytics = state.analytics || {};
+  const exportMonth = document.getElementById("exportMonth");
+  if (exportMonth && !exportMonth.value) {
+    exportMonth.value = (state.monthly_stats || [])[0]?.month || isoDate(new Date()).slice(0, 7);
+  }
   document.getElementById("analyticsMetrics").innerHTML = [
     ["Выручка", money.format(analytics.total_revenue || 0)],
     ["Вложено", money.format(analytics.total_invested || 0)],
@@ -762,9 +767,22 @@ function renderAnalytics() {
           <td class="numeric">${money.format(row.variable_expenses)}</td>
           <td class="numeric">${money.format(row.fixed_expenses)}</td>
           <td class="numeric ${row.net_profit >= 0 ? "positive" : "negative"}">${money.format(row.net_profit)}</td>
+          <td><button class="icon-button" data-export-month="${row.month}" title="Скачать отчет за месяц">Скачать</button></td>
         </tr>`,
     )
-    .join("") || `<tr><td colspan="9" class="empty">Месячной статистики пока нет</td></tr>`;
+    .join("") || `<tr><td colspan="10" class="empty">Месячной статистики пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-export-month]").forEach((button) => {
+    button.addEventListener("click", () => downloadMonthReport(button.dataset.exportMonth));
+  });
+}
+
+function downloadMonthReport(month) {
+  if (!month) {
+    window.alert("Выберите месяц для выгрузки.");
+    return;
+  }
+  window.location.href = `/api/monthly-export?month=${encodeURIComponent(month)}`;
 }
 
 function renderExpenses() {

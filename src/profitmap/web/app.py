@@ -5,17 +5,22 @@ import hmac
 import os
 import secrets
 import time
+from calendar import monthrange
 from dataclasses import asdict
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -582,6 +587,22 @@ def get_analytics() -> dict[str, Any]:
         return _analytics(session, products)
 
 
+@app.get("/api/monthly-export")
+def export_monthly_report(month: str) -> StreamingResponse:
+    start, _ = _month_bounds(month)
+    with SessionFactory() as session:
+        workbook = _monthly_report_workbook(session, month)
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"ProfitMap-{start.strftime('%Y-%m')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.post("/api/analyze")
 def analyze() -> dict[str, str]:
     with SessionFactory() as session:
@@ -876,6 +897,199 @@ def _all_sales(session) -> list[dict[str, Any]]:
 
 def _month_key(value: date) -> str:
     return value.strftime("%Y-%m")
+
+
+def _month_bounds(month: str) -> tuple[date, date]:
+    try:
+        year_text, month_text = month.split("-", 1)
+        year = int(year_text)
+        month_number = int(month_text)
+        last_day = monthrange(year, month_number)[1]
+    except (ValueError, IndexError) as exc:
+        raise HTTPException(status_code=400, detail="Month must be in YYYY-MM format") from exc
+    return date(year, month_number, 1), date(year, month_number, last_day)
+
+
+def _monthly_report_workbook(session, month: str) -> Workbook:
+    start, end = _month_bounds(month)
+    sales, product_rows, totals = _monthly_report_sales(session, start, end)
+    fixed_expenses = list(
+        session.scalars(
+            select(FixedExpense)
+            .where(FixedExpense.expense_date >= start, FixedExpense.expense_date <= end)
+            .order_by(FixedExpense.expense_date, FixedExpense.id)
+        )
+    )
+    variable_expenses = list(
+        session.scalars(
+            select(VariableExpense)
+            .where(VariableExpense.expense_date >= start, VariableExpense.expense_date <= end)
+            .order_by(VariableExpense.expense_date, VariableExpense.id)
+        )
+    )
+    totals["fixed_expenses"] = round(sum(expense.amount for expense in fixed_expenses), 2)
+    totals["variable_expenses"] = round(sum(expense.amount for expense in variable_expenses), 2)
+    totals["net_profit"] = round(totals["gross_profit"] - totals["fixed_expenses"] - totals["variable_expenses"], 2)
+
+    workbook = Workbook()
+    analytics_sheet = workbook.active
+    analytics_sheet.title = "Аналитика"
+    _write_monthly_analytics_sheet(analytics_sheet, month, totals, product_rows)
+    _write_sales_sheet(workbook.create_sheet("Продажи"), sales)
+    _write_expenses_sheet(workbook.create_sheet("Постоянные расходы"), fixed_expenses)
+    _write_expenses_sheet(workbook.create_sheet("Непостоянные расходы"), variable_expenses)
+    return workbook
+
+
+def _monthly_report_sales(session, start: date, end: date) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, float]]:
+    rows = session.execute(
+        select(SaleRecord, Product)
+        .join(Product, SaleRecord.product_id == Product.id)
+        .where(SaleRecord.sale_date >= start, SaleRecord.sale_date <= end)
+        .order_by(SaleRecord.sale_date, SaleRecord.id)
+    )
+    cost_cache: dict[int, dict[int, float]] = {}
+    product_totals: dict[int, dict[str, Any]] = {}
+    sales: list[dict[str, Any]] = []
+    totals: dict[str, float] = {
+        "sales_count": 0,
+        "quantity": 0,
+        "revenue": 0.0,
+        "purchase_cost": 0.0,
+        "gross_profit": 0.0,
+        "fixed_expenses": 0.0,
+        "variable_expenses": 0.0,
+        "net_profit": 0.0,
+        "average_price": 0.0,
+        "markup_percent": 0.0,
+    }
+
+    for sale, product in rows:
+        if product.id not in cost_cache:
+            cost_cache[product.id] = _sale_cost_map(product)
+        purchase_total = cost_cache[product.id].get(sale.id, product.purchase_price * sale.quantity)
+        profit = sale.revenue - purchase_total
+        markup_percent = (profit / purchase_total * 100) if purchase_total else 0.0
+        row = {
+            "sale_date": sale.sale_date,
+            "product": product.name,
+            "sku": product.sku,
+            "quantity": sale.quantity,
+            "unit_price": sale.unit_price,
+            "revenue": sale.revenue,
+            "purchase_total": round(purchase_total, 2),
+            "profit": round(profit, 2),
+            "markup_percent": round(markup_percent, 1),
+            "comment": sale.comment or "",
+        }
+        sales.append(row)
+        product_row = product_totals.setdefault(
+            product.id,
+            {"product": product.name, "sku": product.sku, "quantity": 0, "revenue": 0.0, "purchase_cost": 0.0, "profit": 0.0},
+        )
+        product_row["quantity"] += sale.quantity
+        product_row["revenue"] += sale.revenue
+        product_row["purchase_cost"] += purchase_total
+        product_row["profit"] += profit
+        totals["sales_count"] += 1
+        totals["quantity"] += sale.quantity
+        totals["revenue"] += sale.revenue
+        totals["purchase_cost"] += purchase_total
+        totals["gross_profit"] += profit
+
+    totals["revenue"] = round(totals["revenue"], 2)
+    totals["purchase_cost"] = round(totals["purchase_cost"], 2)
+    totals["gross_profit"] = round(totals["gross_profit"], 2)
+    totals["average_price"] = round(totals["revenue"] / totals["quantity"], 2) if totals["quantity"] else 0.0
+    totals["markup_percent"] = round(totals["gross_profit"] / totals["purchase_cost"] * 100, 1) if totals["purchase_cost"] else 0.0
+
+    product_rows = []
+    for row in product_totals.values():
+        row["revenue"] = round(row["revenue"], 2)
+        row["purchase_cost"] = round(row["purchase_cost"], 2)
+        row["profit"] = round(row["profit"], 2)
+        row["markup_percent"] = round(row["profit"] / row["purchase_cost"] * 100, 1) if row["purchase_cost"] else 0.0
+        product_rows.append(row)
+    product_rows.sort(key=lambda item: item["profit"], reverse=True)
+    return sales, product_rows, totals
+
+
+def _write_monthly_analytics_sheet(sheet, month: str, totals: dict[str, float], product_rows: list[dict[str, Any]]) -> None:
+    sheet.append(["Отчет ProfitMap за месяц", month])
+    sheet.append([])
+    summary_rows = [
+        ("Продаж", totals["sales_count"]),
+        ("Продано штук", totals["quantity"]),
+        ("Выручка", totals["revenue"]),
+        ("Закупка товаров", totals["purchase_cost"]),
+        ("Валовая прибыль", totals["gross_profit"]),
+        ("Постоянные расходы", totals["fixed_expenses"]),
+        ("Непостоянные расходы", totals["variable_expenses"]),
+        ("Чистая прибыль", totals["net_profit"]),
+        ("Средняя цена продажи", totals["average_price"]),
+        ("Наценка", totals["markup_percent"] / 100),
+    ]
+    for label, value in summary_rows:
+        sheet.append([label, value])
+    sheet.append([])
+    sheet.append(["Товар", "Артикул", "Количество", "Выручка", "Закупка", "Разница", "Наценка"])
+    for row in product_rows:
+        sheet.append([row["product"], row["sku"], row["quantity"], row["revenue"], row["purchase_cost"], row["profit"], row["markup_percent"] / 100])
+    _format_report_sheet(sheet, currency_columns={4, 5, 6}, percent_columns={7}, header_rows={1, 14})
+    for row in (3, 4):
+        sheet.cell(row=row, column=2).number_format = '#,##0'
+    for row in range(5, 12):
+        sheet.cell(row=row, column=2).number_format = '#,##0.00 "грн"'
+    sheet.cell(row=12, column=2).number_format = '0.0%'
+
+
+def _write_sales_sheet(sheet, sales: list[dict[str, Any]]) -> None:
+    sheet.append(["Дата", "Товар", "Артикул", "Количество", "Цена продажи", "Выручка", "Закупка", "Разница", "Наценка", "Комментарий"])
+    for sale in sales:
+        sheet.append(
+            [
+                sale["sale_date"].isoformat(),
+                sale["product"],
+                sale["sku"],
+                sale["quantity"],
+                sale["unit_price"],
+                sale["revenue"],
+                sale["purchase_total"],
+                sale["profit"],
+                sale["markup_percent"] / 100,
+                sale["comment"],
+            ]
+        )
+    _format_report_sheet(sheet, currency_columns={5, 6, 7, 8}, percent_columns={9}, header_rows={1})
+
+
+def _write_expenses_sheet(sheet, expenses: list[FixedExpense] | list[VariableExpense]) -> None:
+    sheet.append(["Дата", "Категория", "Сумма", "Причина", "Комментарий"])
+    for expense in expenses:
+        sheet.append([expense.expense_date.isoformat(), expense.category, expense.amount, expense.reason, expense.comment])
+    _format_report_sheet(sheet, currency_columns={3}, header_rows={1})
+
+
+def _format_report_sheet(sheet, currency_columns: set[int] | None = None, percent_columns: set[int] | None = None, header_rows: set[int] | None = None) -> None:
+    currency_columns = currency_columns or set()
+    percent_columns = percent_columns or set()
+    header_rows = header_rows or {1}
+    header_fill = PatternFill("solid", fgColor="111827")
+    header_font = Font(color="FFFFFF", bold=True)
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if cell.row in header_rows:
+                cell.fill = header_fill
+                cell.font = header_font
+            if cell.column in currency_columns and isinstance(cell.value, (int, float)):
+                cell.number_format = '#,##0.00 "грн"'
+            if cell.column in percent_columns and isinstance(cell.value, (int, float)):
+                cell.number_format = '0.0%'
+    for column_cells in sheet.columns:
+        width = min(max(len(str(cell.value or "")) for cell in column_cells) + 2, 42)
+        sheet.column_dimensions[get_column_letter(column_cells[0].column)].width = width
+    sheet.freeze_panes = "A2"
 
 
 def _monthly_stats(session) -> list[dict[str, Any]]:
