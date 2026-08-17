@@ -8,28 +8,10 @@ const fields = [
   ["name", "Название", "text"],
   ["sku", "Артикул", "text"],
   ["category", "Категория", "text"],
-  ["product_class", "Класс товара", "text"],
-  ["subcategory", "Подкатегория", "text"],
-  ["brand", "Бренд", "text"],
   ["stock", "Остаток", "number"],
-  ["expected_monthly_sales", "Продажи/мес.", "number"],
-  ["purchase_price", "Средняя закупочная", "number"],
+  ["purchase_price", "Входная цена", "number"],
   ["sale_price", "Цена продажи", "number"],
-  ["logistics", "Логистика", "number"],
-  ["marketplace_fee", "Комиссия", "number"],
-  ["advertising", "Реклама", "number"],
-  ["packaging", "Упаковка", "number"],
-  ["taxes", "Налоги", "number"],
-  ["other_costs", "Прочие расходы", "number"],
-  ["fixed_cost_allocation", "Постоянные расходы", "number"],
   ["supplier_name", "Поставщик", "text"],
-  ["supplier_contact", "Контакт", "text"],
-  ["supplier_phone", "Телефон", "text"],
-  ["supplier_email", "Email", "text"],
-  ["supplier_site", "Сайт", "text"],
-  ["product_url", "Ссылка на товар", "text"],
-  ["lead_time_days", "Срок поставки", "number"],
-  ["minimum_order_quantity", "Мин. партия", "number"],
 ];
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -53,7 +35,6 @@ function bindNavigation() {
   document.getElementById("themeToggle").addEventListener("click", () => {
     document.body.classList.toggle("dark");
     document.getElementById("themeToggle").textContent = document.body.classList.contains("dark") ? "Светлая тема" : "Темная тема";
-    if (selectedProduct) renderChart(selectedProduct);
   });
 }
 
@@ -62,7 +43,6 @@ function bindActions() {
   document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
     header.addEventListener("click", () => sortProducts(header.dataset.sort));
   });
-  document.getElementById("targetProfit").addEventListener("change", () => selectedProduct && renderChart(readProductForm()));
   document.getElementById("saveProduct").addEventListener("click", saveProduct);
   document.getElementById("deleteProduct").addEventListener("click", deleteProduct);
   document.getElementById("newProduct").addEventListener("click", createProduct);
@@ -204,14 +184,11 @@ function renderProductSortHeaders() {
 function renderSelectedProduct() {
   if (!selectedProduct) {
     document.getElementById("detailTitle").textContent = "Карточка товара";
-    document.getElementById("productForm").innerHTML = `<div class="empty-form">Добавьте товар, чтобы рассчитать юнит-экономику и построить график.</div>`;
-    document.getElementById("productMetrics").innerHTML = "";
-    document.getElementById("pricing").innerHTML = "";
+    document.getElementById("productForm").innerHTML = `<div class="empty-form">Добавьте товар, чтобы вести остатки, поставки и продажи.</div>`;
     document.getElementById("supplySummary").textContent = "Добавьте товар, чтобы учитывать поставки.";
     document.getElementById("suppliesTable").innerHTML = `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
     document.getElementById("salesSummary").textContent = "Добавьте товар, чтобы учитывать продажи.";
     document.getElementById("salesTable").innerHTML = `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
-    Plotly.purge("breakEvenChart");
     return;
   }
   document.getElementById("detailTitle").textContent = selectedProduct.name;
@@ -224,17 +201,8 @@ function renderSelectedProduct() {
       return `<div class="field"><label>${label}</label><input name="${name}" type="${type}"${step}${readonly} value="${escapeAttribute(value)}" /></div>`;
     })
     .join("");
-  form.querySelectorAll("input").forEach((input) => input.addEventListener("input", handleLiveRecalculate));
-  renderProductEconomics(selectedProduct);
   renderSupplies();
   renderSales();
-  renderChart(selectedProduct);
-}
-
-function handleLiveRecalculate() {
-  const product = readProductForm();
-  renderProductEconomics(product);
-  renderChart(product);
 }
 
 function readProductForm() {
@@ -243,64 +211,7 @@ function readProductForm() {
     const field = fields.find(([name]) => name === key);
     data[key] = field && field[2] === "number" ? Number(value || 0) : value;
   });
-  data.economics = calculateEconomics(data, Number(document.getElementById("targetProfit").value));
   return data;
-}
-
-function calculateEconomics(product, targetProfit) {
-  const variableCost =
-    Number(product.purchase_price) +
-    Number(product.logistics) +
-    Number(product.marketplace_fee) +
-    Number(product.advertising) +
-    Number(product.packaging) +
-    Number(product.taxes) +
-    Number(product.other_costs);
-  const expectedSales = Math.max(Number(product.expected_monthly_sales || 1), 1);
-  const fullCost = variableCost + Number(product.fixed_cost_allocation || 0) / expectedSales;
-  const gross = Number(product.sale_price) - variableCost;
-  const net = Number(product.sale_price) - fullCost;
-  const contribution = Number(product.sale_price) - variableCost;
-  return {
-    variable_cost: variableCost,
-    full_cost_per_unit: fullCost,
-    gross_profit: gross,
-    net_profit_per_unit: net,
-    margin_percent: product.sale_price ? (net / Number(product.sale_price)) * 100 : 0,
-    markup_percent: fullCost ? (net / fullCost) * 100 : 0,
-    roi_percent: variableCost ? (net / variableCost) * 100 : 0,
-    break_even_units: contribution > 0 ? Math.ceil(Number(product.fixed_cost_allocation || 0) / contribution) : null,
-    target_units: contribution > 0 ? Math.ceil((Number(product.fixed_cost_allocation || 0) + targetProfit) / contribution) : null,
-    minimum_price: fullCost,
-    recommended_price: fullCost * 1.25,
-    aggressive_price: Math.max(variableCost * 1.08, fullCost * 1.08),
-    premium_price: fullCost * 1.65,
-  };
-}
-
-function renderProductEconomics(product) {
-  const economics = product.economics || calculateEconomics(product, 1000);
-  document.getElementById("productMetrics").innerHTML = [
-    ["Полная себестоимость", money.format(economics.full_cost_per_unit)],
-    ["Валовая прибыль", money.format(economics.gross_profit)],
-    ["Чистая прибыль", money.format(economics.net_profit_per_unit)],
-    ["Маржа", `${Number(economics.margin_percent).toFixed(1)}%`],
-    ["Наценка", `${Number(economics.markup_percent).toFixed(1)}%`],
-    ["ROI", `${Number(economics.roi_percent).toFixed(1)}%`],
-    ["Безубыточность", `${economics.break_even_units || 0} шт.`],
-    ["Целевой объем", `${economics.target_units || 0} шт.`],
-  ]
-    .map(metric)
-    .join("");
-
-  document.getElementById("pricing").innerHTML = [
-    ["Минимальная цена", money.format(economics.minimum_price)],
-    ["Рекомендуемая", money.format(economics.recommended_price)],
-    ["Агрессивная", money.format(economics.aggressive_price)],
-    ["Премиальная", money.format(economics.premium_price)],
-  ]
-    .map(metric)
-    .join("");
 }
 
 function renderSupplies() {
@@ -454,75 +365,6 @@ function fillQuickSalePrice() {
   const option = select.selectedOptions[0];
   const priceInput = document.querySelector("#quickSaleForm [name='unit_price']");
   priceInput.value = option?.dataset.price || "";
-}
-
-function renderChart(product) {
-  const economics = product.economics || calculateEconomics(product, Number(document.getElementById("targetProfit").value));
-  const salePrice = Number(product.sale_price || 0);
-  const fixed = Number(product.fixed_cost_allocation || 0);
-  const variable = Number(economics.variable_cost || 0);
-  const maxUnits = Math.max(100, Math.ceil((economics.target_units || economics.break_even_units || 100) * 1.35));
-  const x = Array.from({ length: 160 }, (_, index) => (index / 159) * maxUnits);
-  const revenue = x.map((units) => salePrice * units);
-  const costs = x.map((units) => variable * units + fixed);
-  const fixedLine = x.map(() => fixed);
-  const dark = document.body.classList.contains("dark");
-
-  const traces = [
-    { x, y: revenue, mode: "lines", name: "Валовые поступления", line: { color: dark ? "#f9fafb" : "#111827", width: 4 } },
-    { x, y: costs, mode: "lines", name: "Валовые издержки", line: { color: "#2563eb", width: 4 } },
-    { x, y: fixedLine, mode: "lines", name: "Постоянные издержки", line: { color: "#8b5cf6", width: 3 } },
-  ];
-  if (economics.break_even_units) {
-    traces.push({
-      x: [economics.break_even_units],
-      y: [salePrice * economics.break_even_units],
-      mode: "markers+text",
-      name: "Точка безубыточности",
-      text: [`${economics.break_even_units} шт.`],
-      textposition: "top center",
-      marker: { color: "#ef4444", size: 12 },
-    });
-  }
-  if (economics.target_units) {
-    traces.push({
-      x: [economics.target_units],
-      y: [salePrice * economics.target_units],
-      mode: "markers+text",
-      name: "Целевая прибыль",
-      text: [`${economics.target_units} шт.`],
-      textposition: "bottom center",
-      marker: { color: "#22c55e", size: 12 },
-    });
-  }
-
-  Plotly.react("breakEvenChart", traces, {
-    autosize: true,
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    font: { color: dark ? "#e5e7eb" : "#111827" },
-    margin: { t: 24, r: 22, b: 128, l: 68 },
-    xaxis: {
-      title: { text: "Объем продаж, шт.", standoff: 32 },
-      automargin: true,
-      gridcolor: dark ? "#263142" : "#e5e7eb",
-      zerolinecolor: dark ? "#3b4558" : "#d1d5db",
-    },
-    yaxis: {
-      title: { text: "Деньги, грн", standoff: 16 },
-      automargin: true,
-      gridcolor: dark ? "#263142" : "#e5e7eb",
-      zerolinecolor: dark ? "#3b4558" : "#d1d5db",
-    },
-    legend: {
-      orientation: "h",
-      x: 0,
-      y: -0.28,
-      xanchor: "left",
-      yanchor: "top",
-      itemwidth: 30,
-    },
-  }, { responsive: true, displayModeBar: false });
 }
 
 async function saveProduct() {

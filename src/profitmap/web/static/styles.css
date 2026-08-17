@@ -214,8 +214,7 @@ p {
 }
 
 .actions,
-.expense-form,
-.target-row {
+.expense-form {
   align-items: center;
   display: flex;
   gap: 10px;
@@ -376,8 +375,7 @@ tbody tr.selected {
   min-height: auto;
 }
 
-.metrics,
-.pricing {
+.metrics {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -404,18 +402,12 @@ tbody tr.selected {
   overflow-wrap: anywhere;
 }
 
-.detail-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(520px, 0.85fr) minmax(520px, 1.15fr);
-  min-width: 0;
-}
-
 .form-grid {
   display: grid;
   gap: 9px;
   align-content: start;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  margin-bottom: 16px;
 }
 
 .field label {
@@ -426,31 +418,6 @@ tbody tr.selected {
 }
 
 .field input {
-  width: 100%;
-}
-
-.chart-panel {
-  min-width: 0;
-}
-
-.target-row {
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.target-row label {
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.target-row select {
-  font-weight: 800;
-  min-width: 130px;
-}
-
-.chart {
-  height: 560px;
-  min-width: 0;
   width: 100%;
 }
 
@@ -591,10 +558,6 @@ pre {
 }
 
 @media (max-width: 1180px) {
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
-
   .form-grid {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
@@ -606,13 +569,8 @@ pre {
   }
 
   .metrics,
-  .pricing,
   .sales-page-summary {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
-  }
-
-  .chart {
-    height: 470px;
   }
 }
 
@@ -650,12 +608,7 @@ pre {
   }
 
   .metrics,
-  .pricing,
   .form-grid {
     grid-template-columns: 1fr;
-  }
-
-  .chart {
-    height: 430px;
   }
 }

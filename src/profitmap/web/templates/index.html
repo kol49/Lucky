@@ -4,8 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260817-monthly-export" />
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260817-simple-product-card" />
   </head>
   <body>
     <aside class="sidebar">
@@ -62,23 +61,7 @@
                 <button id="saveProduct">Сохранить</button>
               </div>
             </div>
-            <div class="metrics" id="productMetrics"></div>
-            <div class="detail-grid">
-              <form id="productForm" class="form-grid"></form>
-              <div class="chart-panel">
-                <div class="target-row">
-                  <label>Целевая прибыль</label>
-                  <select id="targetProfit">
-                    <option value="500">500 грн</option>
-                    <option value="1000" selected>1 000 грн</option>
-                    <option value="5000">5 000 грн</option>
-                    <option value="10000">10 000 грн</option>
-                  </select>
-                </div>
-                <div id="breakEvenChart" class="chart"></div>
-                <div class="pricing" id="pricing"></div>
-              </div>
-            </div>
+            <form id="productForm" class="form-grid compact-product-form"></form>
             <section class="supplies-panel">
               <div class="section-head">
                 <div>
@@ -415,6 +398,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260817-monthly-export"></script>
+    <script src="/static/app.js?v=20260817-simple-product-card"></script>
   </body>
 </html>
