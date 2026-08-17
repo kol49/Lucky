@@ -278,6 +278,7 @@ function profitmap_stock_sync_send_order_sale($order_id): void
 
     wp_remote_post($url, [
         'timeout' => 8,
+        'sslverify' => false,
         'headers' => [
             'Authorization' => 'Bearer ' . $token,
             'Content-Type' => 'application/json',
