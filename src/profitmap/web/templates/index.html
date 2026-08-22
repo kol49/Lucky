@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260817-simple-product-card" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260822-sales-stock-filters" />
   </head>
   <body>
     <aside class="sidebar">
@@ -27,8 +27,11 @@
             <h1>Склад товаров</h1>
             <p>Остатки, закупка, продажная цена и быстрый переход в карточку товара.</p>
           </div>
-          <div class="actions">
+          <div class="actions stock-filters">
             <input id="search" placeholder="Поиск по товару, SKU или поставщику" />
+            <input id="stockNameFilter" placeholder="Название" />
+            <input id="stockSkuFilter" placeholder="Артикул" />
+            <input id="stockCategoryFilter" placeholder="Категория" />
             <button id="newProduct">Добавить товар</button>
           </div>
         </header>
@@ -176,7 +179,15 @@
           <div class="sales-filters">
             <label>
               Поиск
-              <input id="salesSearch" placeholder="Товар, SKU, дата, комментарий" />
+              <input id="salesSearch" placeholder="Комментарий или цена" />
+            </label>
+            <label>
+              Название
+              <input id="salesNameFilter" placeholder="Название товара" />
+            </label>
+            <label>
+              Артикул
+              <input id="salesSkuFilter" placeholder="SKU / артикул" />
             </label>
             <label>
               Товар
@@ -398,6 +409,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260817-simple-product-card"></script>
+    <script src="/static/app.js?v=20260822-sales-stock-filters"></script>
   </body>
 </html>

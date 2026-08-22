@@ -220,6 +220,12 @@ p {
   gap: 10px;
 }
 
+.stock-filters {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(1180px, 100%);
+}
+
 input,
 select {
   background: var(--panel);
@@ -231,7 +237,11 @@ select {
 }
 
 #search {
-  min-width: 360px;
+  min-width: 280px;
+}
+
+.stock-filters input:not(#search) {
+  min-width: 160px;
 }
 
 .workspace {
@@ -481,7 +491,7 @@ tbody tr.selected {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.3fr) minmax(220px, 1.2fr) 140px 150px 150px 170px 120px;
+  grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.1fr) minmax(140px, 0.8fr) minmax(200px, 1.1fr) 140px 150px 150px 160px 120px;
   margin-bottom: 14px;
 }
 

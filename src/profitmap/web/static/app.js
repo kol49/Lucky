@@ -40,6 +40,9 @@ function bindNavigation() {
 
 function bindActions() {
   document.getElementById("search").addEventListener("input", renderProducts);
+  document.getElementById("stockNameFilter").addEventListener("input", renderProducts);
+  document.getElementById("stockSkuFilter").addEventListener("input", renderProducts);
+  document.getElementById("stockCategoryFilter").addEventListener("input", renderProducts);
   document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
     header.addEventListener("click", () => sortProducts(header.dataset.sort));
   });
@@ -57,6 +60,8 @@ function bindActions() {
   document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
   document.getElementById("cancelSaleEdit").addEventListener("click", cancelSaleEdit);
   document.getElementById("salesSearch").addEventListener("input", renderSalesPage);
+  document.getElementById("salesNameFilter").addEventListener("input", renderSalesPage);
+  document.getElementById("salesSkuFilter").addEventListener("input", renderSalesPage);
   document.getElementById("salesProductFilter").addEventListener("change", renderSalesPage);
   document.getElementById("salesDateFrom").addEventListener("change", () => {
     document.getElementById("salesPeriodFilter").value = "";
@@ -94,9 +99,16 @@ async function loadState(preferredProductId = null) {
 
 function renderProducts() {
   const query = document.getElementById("search").value.toLowerCase();
-  const rows = sortProductRows((state.products || []).filter((product) =>
-    `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query),
-  ));
+  const nameQuery = document.getElementById("stockNameFilter").value.trim().toLowerCase();
+  const skuQuery = document.getElementById("stockSkuFilter").value.trim().toLowerCase();
+  const categoryQuery = document.getElementById("stockCategoryFilter").value.trim().toLowerCase();
+  const rows = sortProductRows((state.products || []).filter((product) => {
+    const matchesGlobal = !query || `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query);
+    const matchesName = !nameQuery || String(product.name || "").toLowerCase().includes(nameQuery);
+    const matchesSku = !skuQuery || String(product.sku || "").toLowerCase().includes(skuQuery);
+    const matchesCategory = !categoryQuery || String(product.category || "").toLowerCase().includes(categoryQuery);
+    return matchesGlobal && matchesName && matchesSku && matchesCategory;
+  }));
   renderProductSortHeaders();
   document.getElementById("productsTable").innerHTML = rows.length ? rows
     .map(
@@ -298,16 +310,20 @@ function renderSalesPage() {
   if (!priceInput.value) fillQuickSalePrice();
 
   const query = document.getElementById("salesSearch").value.trim().toLowerCase();
+  const nameQuery = document.getElementById("salesNameFilter").value.trim().toLowerCase();
+  const skuQuery = document.getElementById("salesSkuFilter").value.trim().toLowerCase();
   const filterProductId = productFilter.value;
   const dateFrom = document.getElementById("salesDateFrom").value;
   const dateTo = document.getElementById("salesDateTo").value;
   const sortMode = document.getElementById("salesSort").value;
   const filteredSales = sales.filter((sale) => {
     const matchesProduct = !filterProductId || String(sale.product_id) === String(filterProductId);
-    const haystack = `${sale.sale_date} ${sale.product_name} ${sale.product_sku} ${sale.unit_price} ${sale.comment}`.toLowerCase();
+    const haystack = `${sale.unit_price} ${sale.comment}`.toLowerCase();
+    const matchesName = !nameQuery || String(sale.product_name || "").toLowerCase().includes(nameQuery);
+    const matchesSku = !skuQuery || String(sale.product_sku || "").toLowerCase().includes(skuQuery);
     const matchesDateFrom = !dateFrom || sale.sale_date >= dateFrom;
     const matchesDateTo = !dateTo || sale.sale_date <= dateTo;
-    return matchesProduct && matchesDateFrom && matchesDateTo && (!query || haystack.includes(query));
+    return matchesProduct && matchesName && matchesSku && matchesDateFrom && matchesDateTo && (!query || haystack.includes(query));
   }).sort((left, right) => {
     if (sortMode === "date_asc") return left.sale_date.localeCompare(right.sale_date) || left.id - right.id;
     if (sortMode === "product_asc") return left.product_name.localeCompare(right.product_name, "uk") || left.sale_date.localeCompare(right.sale_date);
@@ -540,6 +556,8 @@ function applySalesPeriodFilter() {
 
 function resetSalesFilters() {
   document.getElementById("salesSearch").value = "";
+  document.getElementById("salesNameFilter").value = "";
+  document.getElementById("salesSkuFilter").value = "";
   document.getElementById("salesProductFilter").value = "";
   document.getElementById("salesPeriodFilter").value = "";
   document.getElementById("salesDateFrom").value = "";
