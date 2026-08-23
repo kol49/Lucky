@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260822-sales-stock-filters" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260823-product-kits" />
   </head>
   <body>
     <aside class="sidebar">
@@ -93,6 +93,32 @@
                   </tr>
                 </thead>
                 <tbody id="suppliesTable"></tbody>
+              </table>
+            </section>
+            <section class="kits-panel">
+              <div class="section-head">
+                <div>
+                  <h2>Комплекты</h2>
+                  <p id="kitSummary">Комплект списывает основной товар по заданному количеству штук.</p>
+                </div>
+              </div>
+              <form id="kitForm" class="kit-form">
+                <input name="kit_sku" placeholder="Артикул комплекта / вариации" required />
+                <input name="kit_name" placeholder="Название комплекта" />
+                <input name="units_per_kit" type="number" min="1" step="1" value="1" placeholder="Штук в комплекте" required />
+                <button type="submit">Добавить комплект</button>
+              </form>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Артикул комплекта</th>
+                    <th>Название</th>
+                    <th>Списывает</th>
+                    <th>Доступно комплектов</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="kitsTable"></tbody>
               </table>
             </section>
             <section class="sales-panel">
@@ -409,6 +435,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260822-sales-stock-filters"></script>
+    <script src="/static/app.js?v=20260823-product-kits"></script>
   </body>
 </html>

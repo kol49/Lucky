@@ -24,7 +24,7 @@ from openpyxl.utils import get_column_letter
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from profitmap.db.models import FixedExpense, Product, ProductSupply, SaleRecord, VariableExpense
+from profitmap.db.models import FixedExpense, Product, ProductKit, ProductSupply, SaleRecord, VariableExpense
 from profitmap.db.session import init_database
 from profitmap.services.ai_consultant import analyze_business
 from profitmap.services.allocation import allocate_fixed_expenses
@@ -99,6 +99,12 @@ class SupplyPayload(BaseModel):
     comment: str = ""
 
 
+class ProductKitPayload(BaseModel):
+    kit_sku: str
+    kit_name: str = ""
+    units_per_kit: int = 1
+
+
 class SalePayload(BaseModel):
     sale_date: date
     quantity: int
@@ -116,6 +122,7 @@ class StoreSaleItemPayload(BaseModel):
     unit_price: float
     name: str = ""
     external_id: str = ""
+    pack_multiplier: int = 1
 
 
 class StoreSalePayload(BaseModel):
@@ -314,6 +321,54 @@ def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
         return _product_detail(product)
 
 
+@app.post("/api/products/{product_id}/kits")
+def create_product_kit(product_id: int, payload: ProductKitPayload) -> dict[str, Any]:
+    kit_sku = payload.kit_sku.strip()
+    if not kit_sku:
+        raise HTTPException(status_code=400, detail="Kit SKU is required")
+    if payload.units_per_kit <= 0:
+        raise HTTPException(status_code=400, detail="Units per kit must be greater than zero")
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        existing_kit = session.scalar(select(ProductKit).where(ProductKit.kit_sku == kit_sku))
+        existing_product = session.scalar(select(Product).where(Product.sku == kit_sku))
+        if existing_kit or existing_product:
+            raise HTTPException(status_code=400, detail="This SKU is already used")
+        kit = ProductKit(
+            base_product_id=product.id,
+            kit_sku=kit_sku,
+            kit_name=payload.kit_name.strip() or kit_sku,
+            units_per_kit=payload.units_per_kit,
+        )
+        session.add(kit)
+        session.flush()
+        refresh_product_from_supplies(session, product)
+        session.commit()
+        _sync_product_stock(session, product)
+        return _product_detail(product)
+
+
+@app.delete("/api/products/{product_id}/kits/{kit_id}")
+def delete_product_kit(product_id: int, kit_id: int) -> dict[str, Any]:
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        kit = session.get(ProductKit, kit_id)
+        if not kit or kit.base_product_id != product.id:
+            raise HTTPException(status_code=404, detail="Kit not found")
+        kit_sku = kit.kit_sku
+        session.delete(kit)
+        session.flush()
+        refresh_product_from_supplies(session, product)
+        session.commit()
+        _sync_product_stock(session, product)
+        sync_stock_items_to_store([{"sku": kit_sku, "stock": 0, "stock_is_units": False}])
+        return _product_detail(product)
+
+
 @app.post("/api/products/{product_id}/sales")
 def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
     if payload.quantity <= 0:
@@ -426,7 +481,8 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
         for item in payload.items:
             if item.quantity <= 0 or item.unit_price < 0:
                 continue
-            product = _find_product_for_store_sku(session, item.sku)
+            resolved = _resolve_store_sale_item(session, item)
+            product = resolved["product"]
             if not product:
                 missing.append(item.sku)
                 continue
@@ -441,12 +497,21 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
                 session.add(sale)
             sale.product_id = product.id
             sale.sale_date = payload.sale_date or date.today()
-            sale.quantity = item.quantity
-            sale.unit_price = item.unit_price
-            sale.revenue = round(item.quantity * item.unit_price, 2)
-            sale.comment = f"Сайт заказ №{payload.order_number or order_id} · {payload.status}".strip()
+            sale.quantity = resolved["quantity"]
+            sale.unit_price = resolved["unit_price"]
+            sale.revenue = resolved["revenue"]
+            sale.comment = _store_sale_comment(payload, resolved)
             touched_products[product.id] = product
-            updated.append({"sku": item.sku, "product_id": product.id, "quantity": item.quantity})
+            updated.append(
+                {
+                    "sku": item.sku,
+                    "product_id": product.id,
+                    "quantity": resolved["quantity"],
+                    "sold_quantity": item.quantity,
+                    "units_per_kit": resolved["units_per_kit"],
+                    "kit_sku": resolved["kit_sku"],
+                }
+            )
 
         session.flush()
         for product in touched_products.values():
@@ -645,6 +710,60 @@ def _find_product_for_store_sku(session, sku: str) -> Product | None:
     return candidates[0]
 
 
+def _find_product_kit_for_store_sku(session, sku: str) -> ProductKit | None:
+    sku = (sku or "").strip()
+    if not sku:
+        return None
+    return session.scalar(select(ProductKit).where(ProductKit.kit_sku == sku))
+
+
+def _resolve_store_sale_item(session, item: StoreSaleItemPayload) -> dict[str, Any]:
+    sold_quantity = max(int(item.quantity or 0), 0)
+    unit_price = max(float(item.unit_price or 0), 0.0)
+    revenue = round(sold_quantity * unit_price, 2)
+    kit = _find_product_kit_for_store_sku(session, item.sku)
+    if kit:
+        units_per_kit = max(int(kit.units_per_kit or 1), 1)
+        base_quantity = sold_quantity * units_per_kit
+        base_unit_price = round(revenue / base_quantity, 4) if base_quantity else 0.0
+        return {
+            "product": kit.base_product,
+            "quantity": base_quantity,
+            "unit_price": base_unit_price,
+            "revenue": revenue,
+            "sold_quantity": sold_quantity,
+            "units_per_kit": units_per_kit,
+            "kit_sku": kit.kit_sku,
+            "kit_name": kit.kit_name,
+        }
+
+    product = _find_product_for_store_sku(session, item.sku)
+    pack_multiplier = max(int(item.pack_multiplier or 1), 1)
+    base_quantity = sold_quantity * pack_multiplier
+    base_unit_price = round(revenue / base_quantity, 4) if base_quantity else 0.0
+    return {
+        "product": product,
+        "quantity": base_quantity,
+        "unit_price": base_unit_price,
+        "revenue": revenue,
+        "sold_quantity": sold_quantity,
+        "units_per_kit": pack_multiplier,
+        "kit_sku": item.sku if pack_multiplier > 1 else "",
+        "kit_name": item.name,
+    }
+
+
+def _store_sale_comment(payload: StoreSalePayload, resolved: dict[str, Any]) -> str:
+    base = f"Сайт заказ №{payload.order_number or payload.order_id} · {payload.status}".strip()
+    kit_sku = resolved.get("kit_sku")
+    units_per_kit = int(resolved.get("units_per_kit") or 1)
+    sold_quantity = int(resolved.get("sold_quantity") or 0)
+    if kit_sku and units_per_kit > 1:
+        kit_name = resolved.get("kit_name") or kit_sku
+        return f"{base} · комплект {kit_sku} ({kit_name}) · {sold_quantity} x {units_per_kit} шт."
+    return base
+
+
 def _product_remaining_stock(product: Product) -> int:
     supplied_quantity = sum(max(supply.quantity, 0) for supply in product.supplies)
     if supplied_quantity:
@@ -711,6 +830,7 @@ def _product_summary(product: Product) -> dict[str, Any]:
         "margin_percent": economics.margin_percent,
         "roi_percent": economics.roi_percent,
         "supplier_name": product.supplier_name,
+        "kits_count": len(product.kits),
     }
 
 
@@ -744,6 +864,7 @@ def _product_detail(product: Product) -> dict[str, Any]:
             "economics": asdict(economics),
             "supply_summary": asdict(supply_summary),
             "supplies": [_supply_dict(supply) for supply in supplies],
+            "kits": [_kit_dict(kit, supply_summary.remaining_quantity if supplied_quantity else product.stock) for kit in product.kits],
             "sales_summary": asdict(sales_summary),
             "sales": [
                 _sale_dict(sale, product.sale_price, sale_costs.get(sale.id, product.purchase_price * sale.quantity))
@@ -803,6 +924,17 @@ def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
         "total_cost": round(supply.quantity * supply.unit_purchase_price, 2),
         "supplier_name": supply.supplier_name,
         "comment": supply.comment,
+    }
+
+
+def _kit_dict(kit: ProductKit, base_stock: int) -> dict[str, Any]:
+    units_per_kit = max(int(kit.units_per_kit or 1), 1)
+    return {
+        "id": kit.id,
+        "kit_sku": kit.kit_sku,
+        "kit_name": kit.kit_name,
+        "units_per_kit": units_per_kit,
+        "available_kits": max(int(base_stock or 0), 0) // units_per_kit,
     }
 
 

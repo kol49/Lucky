@@ -48,6 +48,7 @@ class Product(Base):
 
     sales: Mapped[list["SaleRecord"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     supplies: Mapped[list["ProductSupply"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    kits: Mapped[list["ProductKit"]] = relationship(back_populates="base_product", cascade="all, delete-orphan")
 
 
 class ProductSupply(Base):
@@ -63,6 +64,19 @@ class ProductSupply(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     product: Mapped[Product] = relationship(back_populates="supplies")
+
+
+class ProductKit(Base):
+    __tablename__ = "product_kits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base_product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    kit_sku: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    kit_name: Mapped[str] = mapped_column(String(255), default="")
+    units_per_kit: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    base_product: Mapped[Product] = relationship(back_populates="kits")
 
 
 class FixedExpense(Base):

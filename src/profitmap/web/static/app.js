@@ -55,6 +55,7 @@ function bindActions() {
   document.getElementById("expenseForm").addEventListener("submit", addExpense);
   document.getElementById("variableExpenseForm").addEventListener("submit", addVariableExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
+  document.getElementById("kitForm").addEventListener("submit", addKit);
   document.getElementById("saleForm").addEventListener("submit", addSale);
   document.getElementById("quickSaleForm").addEventListener("submit", addQuickSale);
   document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
@@ -199,6 +200,8 @@ function renderSelectedProduct() {
     document.getElementById("productForm").innerHTML = `<div class="empty-form">Добавьте товар, чтобы вести остатки, поставки и продажи.</div>`;
     document.getElementById("supplySummary").textContent = "Добавьте товар, чтобы учитывать поставки.";
     document.getElementById("suppliesTable").innerHTML = `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
+    document.getElementById("kitSummary").textContent = "Добавьте товар, чтобы создавать комплекты.";
+    document.getElementById("kitsTable").innerHTML = `<tr><td colspan="5" class="empty">Комплектов пока нет</td></tr>`;
     document.getElementById("salesSummary").textContent = "Добавьте товар, чтобы учитывать продажи.";
     document.getElementById("salesTable").innerHTML = `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
     return;
@@ -214,6 +217,7 @@ function renderSelectedProduct() {
     })
     .join("");
   renderSupplies();
+  renderKits();
   renderSales();
 }
 
@@ -250,6 +254,32 @@ function renderSupplies() {
 
   document.querySelectorAll("[data-supply-id]").forEach((button) => {
     button.addEventListener("click", deleteSupply);
+  });
+}
+
+function renderKits() {
+  if (!selectedProduct) return;
+  const kits = selectedProduct.kits || [];
+  document.getElementById("kitSummary").textContent =
+    kits.length
+      ? `Комплектов: ${kits.length}. Остаток основного товара: ${selectedProduct.stock || 0} шт.`
+      : "Создайте комплект под SKU вариации WooCommerce, чтобы при продаже списывался основной товар.";
+
+  document.getElementById("kitsTable").innerHTML = kits.length ? kits
+    .map(
+      (kit) => `
+        <tr>
+          <td>${escapeHtml(kit.kit_sku)}</td>
+          <td>${escapeHtml(kit.kit_name || "")}</td>
+          <td class="numeric">${kit.units_per_kit} шт.</td>
+          <td class="numeric">${kit.available_kits} компл.</td>
+          <td class="action-cell"><button class="danger icon-button" data-kit-id="${kit.id}" title="Удалить комплект">Удалить</button></td>
+        </tr>`,
+    )
+    .join("") : `<tr><td colspan="5" class="empty">Комплектов пока нет</td></tr>`;
+
+  document.querySelectorAll("[data-kit-id]").forEach((button) => {
+    button.addEventListener("click", deleteKit);
   });
 }
 
@@ -432,6 +462,30 @@ async function deleteSupply(event) {
   const confirmed = window.confirm("Удалить эту поставку? Средняя закупочная цена и остаток товара будут пересчитаны.");
   if (!confirmed) return;
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/supplies/${supplyId}`, { method: "DELETE" });
+  await loadState(selectedProduct.id);
+}
+
+async function addKit(event) {
+  event.preventDefault();
+  if (!selectedProduct) return;
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  payload.units_per_kit = Number(payload.units_per_kit || 0);
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  form.reset();
+  form.querySelector("[name='units_per_kit']").value = 1;
+  await loadState(selectedProduct.id);
+}
+
+async function deleteKit(event) {
+  if (!selectedProduct) return;
+  const kitId = event.currentTarget.dataset.kitId;
+  const confirmed = window.confirm("Удалить этот комплект? Остаток этой вариации на сайте будет обнулен.");
+  if (!confirmed) return;
+  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits/${kitId}`, { method: "DELETE" });
   await loadState(selectedProduct.id);
 }
 

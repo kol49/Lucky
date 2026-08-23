@@ -63,6 +63,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
         }
 
         $stock = max(0, (int) ($item['stock'] ?? 0));
+        $stock_is_units = array_key_exists('stock_is_units', $item) ? (bool) $item['stock_is_units'] : true;
         $matched_sku = $sku;
         $product_ids = profitmap_stock_sync_product_ids_by_sku($sku);
         if (!$product_ids) {
@@ -81,6 +82,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
             $stock_by_sku[$matched_sku] = [
                 'stock' => 0,
                 'matched_sku' => $matched_sku,
+                'stock_is_units' => $stock_is_units,
                 'source_skus' => [],
             ];
         }
@@ -103,7 +105,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
                 continue;
             }
 
-            $pack_multiplier = profitmap_stock_sync_product_pack_multiplier($product);
+            $pack_multiplier = $row['stock_is_units'] ? profitmap_stock_sync_product_pack_multiplier($product) : 1;
             $stock = intdiv($unit_stock, $pack_multiplier);
             $product->set_manage_stock(true);
             $product->set_stock_quantity($stock);
@@ -116,6 +118,7 @@ function profitmap_stock_sync_update(WP_REST_Request $request)
                 'product_id' => $product_id,
                 'stock' => $stock,
                 'unit_stock' => $unit_stock,
+                'stock_is_units' => $row['stock_is_units'],
                 'pack_multiplier' => $pack_multiplier,
                 'source_skus' => $row['source_skus'],
             ];
@@ -256,14 +259,14 @@ function profitmap_stock_sync_send_order_sale($order_id): void
         }
 
         $pack_multiplier = profitmap_stock_sync_order_item_pack_multiplier($item, $product);
-        $quantity = $ordered_quantity * $pack_multiplier;
         $line_total = (float) $item->get_total();
         $items[] = [
             'sku' => $sku,
-            'quantity' => $quantity,
-            'unit_price' => round($line_total / $quantity, 4),
+            'quantity' => $ordered_quantity,
+            'unit_price' => round($line_total / $ordered_quantity, 4),
             'name' => $item->get_name(),
             'external_id' => $order->get_id() . ':' . $item_id,
+            'pack_multiplier' => $pack_multiplier,
         ];
     }
 

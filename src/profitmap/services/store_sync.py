@@ -28,17 +28,41 @@ def stock_item_for_product(product: Product) -> dict[str, Any] | None:
     sku = (product.sku or "").strip()
     if not sku:
         return None
-    return {"sku": sku, "stock": stock_for_product(product)}
+    return {"sku": sku, "stock": stock_for_product(product), "stock_is_units": True}
+
+
+def stock_items_for_product(product: Product) -> list[dict[str, Any]]:
+    base_item = stock_item_for_product(product)
+    if not base_item:
+        return []
+    base_stock = int(base_item["stock"])
+    items = [base_item]
+    for kit in product.kits:
+        kit_sku = (kit.kit_sku or "").strip()
+        units_per_kit = max(int(kit.units_per_kit or 1), 1)
+        if not kit_sku:
+            continue
+        items.append(
+            {
+                "sku": kit_sku,
+                "stock": base_stock // units_per_kit,
+                "stock_is_units": False,
+                "base_sku": base_item["sku"],
+                "units_per_kit": units_per_kit,
+            }
+        )
+    return items
 
 
 def sync_products_to_store(products: list[Product]) -> dict[str, Any]:
-    items = [item for product in products if (item := stock_item_for_product(product))]
+    items = []
+    for product in products:
+        items.extend(stock_items_for_product(product))
     return sync_stock_items_to_store(items)
 
 
 def sync_product_to_store(product: Product) -> dict[str, Any]:
-    item = stock_item_for_product(product)
-    return sync_stock_items_to_store([item] if item else [])
+    return sync_stock_items_to_store(stock_items_for_product(product))
 
 
 def sync_stock_items_to_store(items: list[dict[str, Any]]) -> dict[str, Any]:

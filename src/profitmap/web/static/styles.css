@@ -433,6 +433,7 @@ tbody tr.selected {
 
 .expense-form,
 .supply-form,
+.kit-form,
 .sale-form {
   align-items: stretch;
   display: grid;
@@ -442,6 +443,10 @@ tbody tr.selected {
 
 .supply-form {
   grid-template-columns: 150px 130px 150px minmax(150px, 1fr) minmax(180px, 1fr) 170px;
+}
+
+.kit-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr) 150px 170px;
 }
 
 .sale-form {
@@ -510,6 +515,7 @@ tbody tr.selected {
 }
 
 .supplies-panel,
+.kits-panel,
 .sales-panel {
   border-top: 1px solid var(--line);
   margin-top: 16px;
@@ -612,6 +618,7 @@ pre {
 
   .expense-form,
   .supply-form,
+  .kit-form,
   .sale-form,
   .quick-sale-form {
     grid-template-columns: 1fr;
