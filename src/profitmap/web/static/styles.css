@@ -220,12 +220,6 @@ p {
   gap: 10px;
 }
 
-.stock-filters {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: min(1180px, 100%);
-}
-
 input,
 select {
   background: var(--panel);
@@ -237,11 +231,7 @@ select {
 }
 
 #search {
-  min-width: 280px;
-}
-
-.stock-filters input:not(#search) {
-  min-width: 160px;
+  min-width: min(520px, 48vw);
 }
 
 .workspace {

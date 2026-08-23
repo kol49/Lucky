@@ -40,9 +40,6 @@ function bindNavigation() {
 
 function bindActions() {
   document.getElementById("search").addEventListener("input", renderProducts);
-  document.getElementById("stockNameFilter").addEventListener("input", renderProducts);
-  document.getElementById("stockSkuFilter").addEventListener("input", renderProducts);
-  document.getElementById("stockCategoryFilter").addEventListener("input", renderProducts);
   document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
     header.addEventListener("click", () => sortProducts(header.dataset.sort));
   });
@@ -100,15 +97,9 @@ async function loadState(preferredProductId = null) {
 
 function renderProducts() {
   const query = document.getElementById("search").value.toLowerCase();
-  const nameQuery = document.getElementById("stockNameFilter").value.trim().toLowerCase();
-  const skuQuery = document.getElementById("stockSkuFilter").value.trim().toLowerCase();
-  const categoryQuery = document.getElementById("stockCategoryFilter").value.trim().toLowerCase();
   const rows = sortProductRows((state.products || []).filter((product) => {
-    const matchesGlobal = !query || `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase().includes(query);
-    const matchesName = !nameQuery || String(product.name || "").toLowerCase().includes(nameQuery);
-    const matchesSku = !skuQuery || String(product.sku || "").toLowerCase().includes(skuQuery);
-    const matchesCategory = !categoryQuery || String(product.category || "").toLowerCase().includes(categoryQuery);
-    return matchesGlobal && matchesName && matchesSku && matchesCategory;
+    const haystack = `${product.sku} ${product.name} ${product.category} ${product.supplier_name}`.toLowerCase();
+    return !query || haystack.includes(query);
   }));
   renderProductSortHeaders();
   document.getElementById("productsTable").innerHTML = rows.length ? rows
