@@ -345,10 +345,11 @@ def create_product_kit(product_id: int, payload: ProductKitPayload) -> dict[str,
             if payload.secondary_units_per_kit <= 0:
                 raise HTTPException(status_code=400, detail="Second product quantity must be greater than zero")
             secondary_units = payload.secondary_units_per_kit
+        if kit_sku == product.sku or (secondary_product and kit_sku == secondary_product.sku):
+            raise HTTPException(status_code=400, detail="Kit SKU must be different from component SKU")
         existing_kit = session.scalar(select(ProductKit).where(ProductKit.kit_sku == kit_sku))
-        existing_product = session.scalar(select(Product).where(Product.sku == kit_sku))
-        if existing_kit or existing_product:
-            raise HTTPException(status_code=400, detail="This SKU is already used")
+        if existing_kit:
+            raise HTTPException(status_code=400, detail="This kit SKU is already used")
         kit = ProductKit(
             base_product_id=product.id,
             secondary_product_id=secondary_product.id if secondary_product else None,

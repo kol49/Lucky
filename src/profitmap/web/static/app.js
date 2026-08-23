@@ -470,14 +470,18 @@ async function addKit(event) {
   payload.units_per_kit = Number(payload.units_per_kit || 0);
   payload.secondary_product_id = payload.secondary_product_id ? Number(payload.secondary_product_id) : null;
   payload.secondary_units_per_kit = Number(payload.secondary_units_per_kit || 0);
-  selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  form.reset();
-  form.querySelector("[name='units_per_kit']").value = 1;
-  form.querySelector("[name='secondary_units_per_kit']").value = 0;
-  await loadState(selectedProduct.id);
+  try {
+    selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    form.reset();
+    form.querySelector("[name='units_per_kit']").value = 1;
+    form.querySelector("[name='secondary_units_per_kit']").value = 0;
+    await loadState(selectedProduct.id);
+  } catch (error) {
+    window.alert(`Не удалось добавить комплект: ${error.message}`);
+  }
 }
 
 async function deleteKit(event) {
@@ -797,7 +801,16 @@ async function fetchJson(url, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const text = await response.text();
+    try {
+      const payload = JSON.parse(text);
+      throw new Error(payload.detail || text);
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error(text);
+      throw error;
+    }
+  }
   return response.json();
 }
 

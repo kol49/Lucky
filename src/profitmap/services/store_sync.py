@@ -61,9 +61,19 @@ def stock_items_for_product(product: Product) -> list[dict[str, Any]]:
 
 
 def sync_products_to_store(products: list[Product]) -> dict[str, Any]:
-    items = []
+    regular_items: dict[str, dict[str, Any]] = {}
+    kit_items: dict[str, dict[str, Any]] = {}
     for product in products:
-        items.extend(stock_items_for_product(product))
+        for item in stock_items_for_product(product):
+            sku = (item.get("sku") or "").strip()
+            if not sku:
+                continue
+            if item.get("stock_is_units") is False:
+                kit_items[sku] = item
+            else:
+                regular_items[sku] = item
+    regular_items.update(kit_items)
+    items = list(regular_items.values())
     return sync_stock_items_to_store(items)
 
 
