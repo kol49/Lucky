@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260823-kit-add-fix" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260823-sales-layout-sort" />
   </head>
   <body>
     <aside class="sidebar">
@@ -205,11 +205,11 @@
             </div>
           </div>
           <div class="sales-filters">
-            <label>
+            <label class="filter-wide">
               Поиск
               <input id="salesSearch" placeholder="Комментарий или цена" />
             </label>
-            <label>
+            <label class="filter-wide">
               Название
               <input id="salesNameFilter" placeholder="Название товара" />
             </label>
@@ -217,7 +217,7 @@
               Артикул
               <input id="salesSkuFilter" placeholder="SKU / артикул" />
             </label>
-            <label>
+            <label class="filter-wide">
               Товар
               <select id="salesProductFilter">
                 <option value="">Все товары</option>
@@ -247,24 +247,34 @@
                 <option value="date_desc">Новые сверху</option>
                 <option value="date_asc">Старые сверху</option>
                 <option value="product_asc">По товару</option>
+                <option value="product_desc">По товару Я-А</option>
+                <option value="sku_asc">По артикулу</option>
+                <option value="sku_desc">По артикулу Я-А</option>
                 <option value="quantity_desc">По количеству</option>
+                <option value="quantity_asc">По количеству меньше</option>
+                <option value="purchase_desc">По закупке</option>
+                <option value="purchase_asc">По закупке меньше</option>
+                <option value="price_desc">По цене продажи</option>
+                <option value="price_asc">По цене продажи меньше</option>
                 <option value="profit_desc">По разнице</option>
+                <option value="profit_asc">По разнице меньше</option>
                 <option value="markup_desc">По наценке</option>
+                <option value="markup_asc">По наценке меньше</option>
               </select>
             </label>
             <button type="button" id="salesResetFilters">Сбросить</button>
           </div>
-          <table>
+          <table class="sales-table">
             <thead>
               <tr>
-                <th>Дата</th>
-                <th>Товар</th>
-                <th>SKU</th>
-                <th>Количество</th>
-                <th>Закупка</th>
-                <th>Цена продажи</th>
-                <th>Разница</th>
-                <th>Наценка</th>
+                <th class="sortable" data-sales-sort="date" aria-sort="descending">Дата</th>
+                <th class="sortable" data-sales-sort="product" aria-sort="none">Товар</th>
+                <th class="sortable" data-sales-sort="sku" aria-sort="none">SKU</th>
+                <th class="sortable" data-sales-sort="quantity" aria-sort="none">Количество</th>
+                <th class="sortable" data-sales-sort="purchase" aria-sort="none">Закупка</th>
+                <th class="sortable" data-sales-sort="price" aria-sort="none">Цена продажи</th>
+                <th class="sortable" data-sales-sort="profit" aria-sort="none">Разница</th>
+                <th class="sortable" data-sales-sort="markup" aria-sort="none">Наценка</th>
                 <th>Комментарий</th>
                 <th></th>
               </tr>
@@ -437,6 +447,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260823-kit-add-fix"></script>
+    <script src="/static/app.js?v=20260823-sales-layout-sort"></script>
   </body>
 </html>

@@ -486,8 +486,12 @@ tbody tr.selected {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.1fr) minmax(140px, 0.8fr) minmax(200px, 1.1fr) 140px 150px 150px 160px 120px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   margin-bottom: 14px;
+}
+
+.sales-filters .filter-wide {
+  grid-column: span 2;
 }
 
 .sales-filters label {
@@ -501,7 +505,45 @@ tbody tr.selected {
 .sales-filters select,
 .sales-filters button {
   min-height: 44px;
+  min-width: 0;
   width: 100%;
+}
+
+.sales-filters button {
+  align-self: end;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable::after {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted);
+  content: "";
+  display: inline-block;
+  height: 0;
+  margin-left: 6px;
+  opacity: 0.45;
+  transform: translateY(-2px);
+  width: 0;
+}
+
+.sortable.active {
+  color: var(--text);
+}
+
+.sortable.active::after {
+  border-top-color: var(--blue);
+  opacity: 1;
+}
+
+.sortable.active[data-direction="asc"]::after {
+  border-bottom: 5px solid var(--blue);
+  border-top: 0;
 }
 
 .supplies-panel,
@@ -572,6 +614,10 @@ pre {
   .sales-page-grid,
   .quick-sale-form {
     grid-template-columns: 1fr;
+  }
+
+  .sales-filters .filter-wide {
+    grid-column: span 1;
   }
 
   .metrics,

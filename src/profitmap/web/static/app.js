@@ -4,6 +4,17 @@ let selectedProduct = null;
 let productSort = { key: "sku", direction: "asc" };
 let editingSaleId = null;
 
+const salesSortDefaults = {
+  date: "desc",
+  markup: "desc",
+  price: "desc",
+  product: "asc",
+  profit: "desc",
+  purchase: "desc",
+  quantity: "desc",
+  sku: "asc",
+};
+
 const fields = [
   ["name", "Название", "text"],
   ["sku", "Артикул", "text"],
@@ -42,6 +53,9 @@ function bindActions() {
   document.getElementById("search").addEventListener("input", renderProducts);
   document.querySelectorAll(".products-grid th[data-sort]").forEach((header) => {
     header.addEventListener("click", () => sortProducts(header.dataset.sort));
+  });
+  document.querySelectorAll("[data-sales-sort]").forEach((header) => {
+    header.addEventListener("click", () => sortSalesBy(header.dataset.salesSort));
   });
   document.getElementById("saveProduct").addEventListener("click", saveProduct);
   document.getElementById("deleteProduct").addEventListener("click", deleteProduct);
@@ -343,6 +357,7 @@ function renderSalesPage() {
   const dateFrom = document.getElementById("salesDateFrom").value;
   const dateTo = document.getElementById("salesDateTo").value;
   const sortMode = document.getElementById("salesSort").value;
+  updateSalesSortHeaders(sortMode);
   const filteredSales = sales.filter((sale) => {
     const matchesProduct = !filterProductId || String(sale.product_id) === String(filterProductId);
     const haystack = `${sale.unit_price} ${sale.comment}`.toLowerCase();
@@ -352,12 +367,7 @@ function renderSalesPage() {
     const matchesDateTo = !dateTo || sale.sale_date <= dateTo;
     return matchesProduct && matchesName && matchesSku && matchesDateFrom && matchesDateTo && (!query || haystack.includes(query));
   }).sort((left, right) => {
-    if (sortMode === "date_asc") return left.sale_date.localeCompare(right.sale_date) || left.id - right.id;
-    if (sortMode === "product_asc") return left.product_name.localeCompare(right.product_name, "uk") || left.sale_date.localeCompare(right.sale_date);
-    if (sortMode === "quantity_desc") return Number(right.quantity || 0) - Number(left.quantity || 0);
-    if (sortMode === "profit_desc") return Number(right.profit || 0) - Number(left.profit || 0);
-    if (sortMode === "markup_desc") return Number(right.markup_percent || 0) - Number(left.markup_percent || 0);
-    return right.sale_date.localeCompare(left.sale_date) || right.id - left.id;
+    return compareSales(left, right, sortMode);
   });
 
   const totalQuantity = filteredSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
@@ -400,6 +410,43 @@ function renderSalesPage() {
   });
   document.querySelectorAll("[data-global-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteGlobalSale);
+  });
+}
+
+function sortSalesBy(key) {
+  const select = document.getElementById("salesSort");
+  const [currentKey, currentDirection] = String(select.value || "date_desc").split("_");
+  const defaultDirection = salesSortDefaults[key] || "desc";
+  const nextDirection = currentKey === key
+    ? (currentDirection === "asc" ? "desc" : "asc")
+    : defaultDirection;
+  select.value = `${key}_${nextDirection}`;
+  renderSalesPage();
+}
+
+function compareSales(left, right, sortMode) {
+  const [key, direction = "desc"] = String(sortMode || "date_desc").split("_");
+  const factor = direction === "asc" ? 1 : -1;
+  const byNewest = right.sale_date.localeCompare(left.sale_date) || Number(right.id || 0) - Number(left.id || 0);
+
+  if (key === "date") return factor * left.sale_date.localeCompare(right.sale_date) || Number(right.id || 0) - Number(left.id || 0);
+  if (key === "product") return factor * String(left.product_name || "").localeCompare(String(right.product_name || ""), "uk") || byNewest;
+  if (key === "sku") return factor * String(left.product_sku || "").localeCompare(String(right.product_sku || ""), "uk", { numeric: true }) || byNewest;
+  if (key === "quantity") return factor * (Number(left.quantity || 0) - Number(right.quantity || 0)) || byNewest;
+  if (key === "purchase") return factor * (Number(left.purchase_total || 0) - Number(right.purchase_total || 0)) || byNewest;
+  if (key === "price") return factor * (Number(left.unit_price || 0) - Number(right.unit_price || 0)) || byNewest;
+  if (key === "profit") return factor * (Number(left.profit || 0) - Number(right.profit || 0)) || byNewest;
+  if (key === "markup") return factor * (Number(left.markup_percent || 0) - Number(right.markup_percent || 0)) || byNewest;
+  return byNewest;
+}
+
+function updateSalesSortHeaders(sortMode) {
+  const [key, direction = "desc"] = String(sortMode || "date_desc").split("_");
+  document.querySelectorAll("[data-sales-sort]").forEach((header) => {
+    const isActive = header.dataset.salesSort === key;
+    header.classList.toggle("active", isActive);
+    header.dataset.direction = isActive ? direction : "";
+    header.setAttribute("aria-sort", isActive ? (direction === "asc" ? "ascending" : "descending") : "none");
   });
 }
 
