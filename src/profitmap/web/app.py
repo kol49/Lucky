@@ -922,6 +922,8 @@ def _product_detail(product: Product) -> dict[str, Any]:
     supplies = sorted(product.supplies, key=lambda supply: (supply.supply_date, supply.id), reverse=True)
     sales = sorted(product.sales, key=lambda sale: (sale.sale_date, sale.id), reverse=True)
     supply_summary = calculate_supply_summary(product, supplies)
+    supplied_quantity = sum(max(supply.quantity, 0) for supply in supplies)
+    available_stock = supply_summary.remaining_quantity if supplied_quantity else product.stock
     payload = _product_summary(product)
     economics = _economics(product, supply_summary.average_purchase_price)
     sales_summary = calculate_sales_summary(product, sales)
@@ -948,7 +950,7 @@ def _product_detail(product: Product) -> dict[str, Any]:
             "economics": asdict(economics),
             "supply_summary": asdict(supply_summary),
             "supplies": [_supply_dict(supply) for supply in supplies],
-            "kits": [_kit_dict(kit, supply_summary.remaining_quantity if supplied_quantity else product.stock) for kit in product.kits],
+            "kits": [_kit_dict(kit, available_stock) for kit in product.kits],
             "sales_summary": asdict(sales_summary),
             "sales": [
                 _sale_dict(sale, product.sale_price, sale_costs.get(sale.id, product.purchase_price * sale.quantity))
