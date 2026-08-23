@@ -446,7 +446,7 @@ tbody tr.selected {
 }
 
 .kit-form {
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr) 150px 170px;
+  grid-template-columns: minmax(170px, 1fr) minmax(190px, 1fr) 140px minmax(190px, 1fr) 140px 170px;
 }
 
 .sale-form {

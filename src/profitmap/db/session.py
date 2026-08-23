@@ -35,6 +35,13 @@ def migrate_database(engine) -> None:
                 connection.execute(text("ALTER TABLE sales ADD COLUMN external_source VARCHAR(64) DEFAULT ''"))
             if "external_id" not in sales_columns:
                 connection.execute(text("ALTER TABLE sales ADD COLUMN external_id VARCHAR(128) DEFAULT ''"))
+    if "product_kits" in table_names:
+        kit_columns = {column["name"] for column in inspector.get_columns("product_kits")}
+        with engine.begin() as connection:
+            if "secondary_product_id" not in kit_columns:
+                connection.execute(text("ALTER TABLE product_kits ADD COLUMN secondary_product_id INTEGER"))
+            if "secondary_units_per_kit" not in kit_columns:
+                connection.execute(text("ALTER TABLE product_kits ADD COLUMN secondary_units_per_kit INTEGER DEFAULT 0"))
     Base.metadata.create_all(engine)
 
 

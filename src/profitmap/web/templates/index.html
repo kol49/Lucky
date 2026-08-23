@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260823-product-kits" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260823-product-kits-2" />
   </head>
   <body>
     <aside class="sidebar">
@@ -105,7 +105,11 @@
               <form id="kitForm" class="kit-form">
                 <input name="kit_sku" placeholder="Артикул комплекта / вариации" required />
                 <input name="kit_name" placeholder="Название комплекта" />
-                <input name="units_per_kit" type="number" min="1" step="1" value="1" placeholder="Штук в комплекте" required />
+                <input name="units_per_kit" type="number" min="1" step="1" value="1" placeholder="Штук 1-го товара" required />
+                <select name="secondary_product_id" id="kitSecondProduct">
+                  <option value="">Без второго товара</option>
+                </select>
+                <input name="secondary_units_per_kit" type="number" min="0" step="1" value="0" placeholder="Штук 2-го товара" />
                 <button type="submit">Добавить комплект</button>
               </form>
               <table>
@@ -113,7 +117,8 @@
                   <tr>
                     <th>Артикул комплекта</th>
                     <th>Название</th>
-                    <th>Списывает</th>
+                    <th>Товар 1</th>
+                    <th>Товар 2</th>
                     <th>Доступно комплектов</th>
                     <th></th>
                   </tr>
@@ -435,6 +440,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260823-product-kits"></script>
+    <script src="/static/app.js?v=20260823-product-kits-2"></script>
   </body>
 </html>

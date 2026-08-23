@@ -201,7 +201,7 @@ function renderSelectedProduct() {
     document.getElementById("supplySummary").textContent = "Добавьте товар, чтобы учитывать поставки.";
     document.getElementById("suppliesTable").innerHTML = `<tr><td colspan="7" class="empty">Поставок пока нет</td></tr>`;
     document.getElementById("kitSummary").textContent = "Добавьте товар, чтобы создавать комплекты.";
-    document.getElementById("kitsTable").innerHTML = `<tr><td colspan="5" class="empty">Комплектов пока нет</td></tr>`;
+    document.getElementById("kitsTable").innerHTML = `<tr><td colspan="6" class="empty">Комплектов пока нет</td></tr>`;
     document.getElementById("salesSummary").textContent = "Добавьте товар, чтобы учитывать продажи.";
     document.getElementById("salesTable").innerHTML = `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
     return;
@@ -260,6 +260,11 @@ function renderSupplies() {
 function renderKits() {
   if (!selectedProduct) return;
   const kits = selectedProduct.kits || [];
+  const secondProductSelect = document.getElementById("kitSecondProduct");
+  secondProductSelect.innerHTML = `<option value="">Без второго товара</option>` + (state.products || [])
+    .filter((product) => Number(product.id) !== Number(selectedProduct.id))
+    .map((product) => `<option value="${product.id}">${escapeHtml(product.name)} · ${escapeHtml(product.sku)}</option>`)
+    .join("");
   document.getElementById("kitSummary").textContent =
     kits.length
       ? `Комплектов: ${kits.length}. Остаток основного товара: ${selectedProduct.stock || 0} шт.`
@@ -271,12 +276,13 @@ function renderKits() {
         <tr>
           <td>${escapeHtml(kit.kit_sku)}</td>
           <td>${escapeHtml(kit.kit_name || "")}</td>
-          <td class="numeric">${kit.units_per_kit} шт.</td>
+          <td>${escapeHtml(selectedProduct.sku)} · ${kit.units_per_kit} шт.</td>
+          <td>${kit.secondary_product_id ? `${escapeHtml(kit.secondary_product_sku)} · ${kit.secondary_units_per_kit} шт.` : "—"}</td>
           <td class="numeric">${kit.available_kits} компл.</td>
           <td class="action-cell"><button class="danger icon-button" data-kit-id="${kit.id}" title="Удалить комплект">Удалить</button></td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="5" class="empty">Комплектов пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="6" class="empty">Комплектов пока нет</td></tr>`;
 
   document.querySelectorAll("[data-kit-id]").forEach((button) => {
     button.addEventListener("click", deleteKit);
@@ -471,12 +477,15 @@ async function addKit(event) {
   const form = event.currentTarget;
   const payload = Object.fromEntries(new FormData(form).entries());
   payload.units_per_kit = Number(payload.units_per_kit || 0);
+  payload.secondary_product_id = payload.secondary_product_id ? Number(payload.secondary_product_id) : null;
+  payload.secondary_units_per_kit = Number(payload.secondary_units_per_kit || 0);
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
   form.reset();
   form.querySelector("[name='units_per_kit']").value = 1;
+  form.querySelector("[name='secondary_units_per_kit']").value = 0;
   await loadState(selectedProduct.id);
 }
 

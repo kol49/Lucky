@@ -103,6 +103,8 @@ class ProductKitPayload(BaseModel):
     kit_sku: str
     kit_name: str = ""
     units_per_kit: int = 1
+    secondary_product_id: int | None = None
+    secondary_units_per_kit: int = 0
 
 
 class SalePayload(BaseModel):
@@ -332,15 +334,28 @@ def create_product_kit(product_id: int, payload: ProductKitPayload) -> dict[str,
         product = session.get(Product, product_id)
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        secondary_product = None
+        secondary_units = 0
+        if payload.secondary_product_id:
+            if payload.secondary_product_id == product.id:
+                raise HTTPException(status_code=400, detail="Second product must be different")
+            secondary_product = session.get(Product, payload.secondary_product_id)
+            if not secondary_product:
+                raise HTTPException(status_code=404, detail="Second product not found")
+            if payload.secondary_units_per_kit <= 0:
+                raise HTTPException(status_code=400, detail="Second product quantity must be greater than zero")
+            secondary_units = payload.secondary_units_per_kit
         existing_kit = session.scalar(select(ProductKit).where(ProductKit.kit_sku == kit_sku))
         existing_product = session.scalar(select(Product).where(Product.sku == kit_sku))
         if existing_kit or existing_product:
             raise HTTPException(status_code=400, detail="This SKU is already used")
         kit = ProductKit(
             base_product_id=product.id,
+            secondary_product_id=secondary_product.id if secondary_product else None,
             kit_sku=kit_sku,
             kit_name=payload.kit_name.strip() or kit_sku,
             units_per_kit=payload.units_per_kit,
+            secondary_units_per_kit=secondary_units,
         )
         session.add(kit)
         session.flush()
@@ -481,37 +496,59 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
         for item in payload.items:
             if item.quantity <= 0 or item.unit_price < 0:
                 continue
-            resolved = _resolve_store_sale_item(session, item)
-            product = resolved["product"]
-            if not product:
+            resolved_items = _resolve_store_sale_items(session, item)
+            if not resolved_items:
                 missing.append(item.sku)
                 continue
-            external_id = item.external_id or f"{order_id}:{item.sku}"
-            sale = session.scalar(
-                select(SaleRecord).where(SaleRecord.external_source == "woocommerce", SaleRecord.external_id == external_id)
+            base_external_id = item.external_id or f"{order_id}:{item.sku}"
+            component_external_ids = {
+                _component_external_id(base_external_id, resolved, len(resolved_items))
+                for resolved in resolved_items
+            }
+            stale_sales = list(
+                session.scalars(
+                    select(SaleRecord).where(
+                        SaleRecord.external_source == "woocommerce",
+                        (
+                            (SaleRecord.external_id == base_external_id)
+                            | (SaleRecord.external_id.like(f"{base_external_id}:p%"))
+                        ),
+                    )
+                )
             )
-            if sale:
-                touched_products[sale.product_id] = sale.product
-            else:
-                sale = SaleRecord(external_source="woocommerce", external_id=external_id)
-                session.add(sale)
-            sale.product_id = product.id
-            sale.sale_date = payload.sale_date or date.today()
-            sale.quantity = resolved["quantity"]
-            sale.unit_price = resolved["unit_price"]
-            sale.revenue = resolved["revenue"]
-            sale.comment = _store_sale_comment(payload, resolved)
-            touched_products[product.id] = product
-            updated.append(
-                {
-                    "sku": item.sku,
-                    "product_id": product.id,
-                    "quantity": resolved["quantity"],
-                    "sold_quantity": item.quantity,
-                    "units_per_kit": resolved["units_per_kit"],
-                    "kit_sku": resolved["kit_sku"],
-                }
-            )
+            for stale_sale in stale_sales:
+                if stale_sale.external_id not in component_external_ids:
+                    touched_products[stale_sale.product_id] = stale_sale.product
+                    session.delete(stale_sale)
+
+            for resolved in resolved_items:
+                product = resolved["product"]
+                external_id = _component_external_id(base_external_id, resolved, len(resolved_items))
+                sale = session.scalar(
+                    select(SaleRecord).where(SaleRecord.external_source == "woocommerce", SaleRecord.external_id == external_id)
+                )
+                if sale:
+                    touched_products[sale.product_id] = sale.product
+                else:
+                    sale = SaleRecord(external_source="woocommerce", external_id=external_id)
+                    session.add(sale)
+                sale.product_id = product.id
+                sale.sale_date = payload.sale_date or date.today()
+                sale.quantity = resolved["quantity"]
+                sale.unit_price = resolved["unit_price"]
+                sale.revenue = resolved["revenue"]
+                sale.comment = _store_sale_comment(payload, resolved)
+                touched_products[product.id] = product
+                updated.append(
+                    {
+                        "sku": item.sku,
+                        "product_id": product.id,
+                        "quantity": resolved["quantity"],
+                        "sold_quantity": item.quantity,
+                        "units_per_kit": resolved["units_per_kit"],
+                        "kit_sku": resolved["kit_sku"],
+                    }
+                )
 
         session.flush()
         for product in touched_products.values():
@@ -677,7 +714,11 @@ def analyze() -> dict[str, str]:
 
 
 def _sync_product_stock(session, product: Product) -> dict[str, Any]:
-    return sync_products_to_store(_related_products_for_store_sync(session, product.sku))
+    products = {item.id: item for item in _related_products_for_store_sync(session, product.sku)}
+    secondary_kits = session.scalars(select(ProductKit).where(ProductKit.secondary_product_id == product.id))
+    for kit in secondary_kits:
+        products[kit.base_product.id] = kit.base_product
+    return sync_products_to_store(list(products.values()))
 
 
 def _sync_deleted_product_stock(session, sku: str, deleted_product_id: int) -> dict[str, Any]:
@@ -717,31 +758,43 @@ def _find_product_kit_for_store_sku(session, sku: str) -> ProductKit | None:
     return session.scalar(select(ProductKit).where(ProductKit.kit_sku == sku))
 
 
-def _resolve_store_sale_item(session, item: StoreSaleItemPayload) -> dict[str, Any]:
+def _resolve_store_sale_items(session, item: StoreSaleItemPayload) -> list[dict[str, Any]]:
     sold_quantity = max(int(item.quantity or 0), 0)
     unit_price = max(float(item.unit_price or 0), 0.0)
     revenue = round(sold_quantity * unit_price, 2)
     kit = _find_product_kit_for_store_sku(session, item.sku)
     if kit:
-        units_per_kit = max(int(kit.units_per_kit or 1), 1)
-        base_quantity = sold_quantity * units_per_kit
-        base_unit_price = round(revenue / base_quantity, 4) if base_quantity else 0.0
-        return {
-            "product": kit.base_product,
-            "quantity": base_quantity,
-            "unit_price": base_unit_price,
-            "revenue": revenue,
-            "sold_quantity": sold_quantity,
-            "units_per_kit": units_per_kit,
-            "kit_sku": kit.kit_sku,
-            "kit_name": kit.kit_name,
-        }
+        components = [
+            {
+                "product": kit.base_product,
+                "quantity": sold_quantity * max(int(kit.units_per_kit or 1), 1),
+                "sold_quantity": sold_quantity,
+                "units_per_kit": max(int(kit.units_per_kit or 1), 1),
+                "kit_sku": kit.kit_sku,
+                "kit_name": kit.kit_name,
+            }
+        ]
+        secondary_units = max(int(kit.secondary_units_per_kit or 0), 0)
+        if kit.secondary_product and secondary_units:
+            components.append(
+                {
+                    "product": kit.secondary_product,
+                    "quantity": sold_quantity * secondary_units,
+                    "sold_quantity": sold_quantity,
+                    "units_per_kit": secondary_units,
+                    "kit_sku": kit.kit_sku,
+                    "kit_name": kit.kit_name,
+                }
+            )
+        return _allocate_store_sale_revenue(components, revenue)
 
     product = _find_product_for_store_sku(session, item.sku)
+    if not product:
+        return []
     pack_multiplier = max(int(item.pack_multiplier or 1), 1)
     base_quantity = sold_quantity * pack_multiplier
     base_unit_price = round(revenue / base_quantity, 4) if base_quantity else 0.0
-    return {
+    return [{
         "product": product,
         "quantity": base_quantity,
         "unit_price": base_unit_price,
@@ -750,7 +803,36 @@ def _resolve_store_sale_item(session, item: StoreSaleItemPayload) -> dict[str, A
         "units_per_kit": pack_multiplier,
         "kit_sku": item.sku if pack_multiplier > 1 else "",
         "kit_name": item.name,
-    }
+    }]
+
+
+def _allocate_store_sale_revenue(components: list[dict[str, Any]], revenue: float) -> list[dict[str, Any]]:
+    weights = [
+        max(float(component["product"].purchase_price or 0), 0.0) * max(int(component["quantity"] or 0), 0)
+        for component in components
+    ]
+    if not any(weights):
+        weights = [max(int(component["quantity"] or 0), 0) for component in components]
+    total_weight = sum(weights)
+    allocated_total = 0.0
+    for index, component in enumerate(components):
+        if index == len(components) - 1:
+            component_revenue = round(revenue - allocated_total, 2)
+        elif total_weight:
+            component_revenue = round(revenue * weights[index] / total_weight, 2)
+            allocated_total += component_revenue
+        else:
+            component_revenue = 0.0
+        quantity = max(int(component["quantity"] or 0), 0)
+        component["revenue"] = component_revenue
+        component["unit_price"] = round(component_revenue / quantity, 4) if quantity else 0.0
+    return components
+
+
+def _component_external_id(base_external_id: str, resolved: dict[str, Any], components_count: int) -> str:
+    if components_count == 1 and not resolved.get("kit_sku"):
+        return base_external_id
+    return f"{base_external_id}:p{resolved['product'].id}"
 
 
 def _store_sale_comment(payload: StoreSalePayload, resolved: dict[str, Any]) -> str:
@@ -760,7 +842,9 @@ def _store_sale_comment(payload: StoreSalePayload, resolved: dict[str, Any]) -> 
     sold_quantity = int(resolved.get("sold_quantity") or 0)
     if kit_sku and units_per_kit > 1:
         kit_name = resolved.get("kit_name") or kit_sku
-        return f"{base} · комплект {kit_sku} ({kit_name}) · {sold_quantity} x {units_per_kit} шт."
+        product = resolved.get("product")
+        product_sku = f" · компонент {product.sku}" if product else ""
+        return f"{base} · комплект {kit_sku} ({kit_name}) · {sold_quantity} x {units_per_kit} шт.{product_sku}"
     return base
 
 
@@ -929,12 +1013,24 @@ def _supply_dict(supply: ProductSupply) -> dict[str, Any]:
 
 def _kit_dict(kit: ProductKit, base_stock: int) -> dict[str, Any]:
     units_per_kit = max(int(kit.units_per_kit or 1), 1)
+    available_kits = max(int(base_stock or 0), 0) // units_per_kit
+    secondary_units = max(int(kit.secondary_units_per_kit or 0), 0)
+    secondary_stock = 0
+    if kit.secondary_product and secondary_units:
+        secondary_stock = _product_remaining_stock(kit.secondary_product)
+        available_kits = min(available_kits, max(int(secondary_stock or 0), 0) // secondary_units)
     return {
         "id": kit.id,
         "kit_sku": kit.kit_sku,
         "kit_name": kit.kit_name,
         "units_per_kit": units_per_kit,
-        "available_kits": max(int(base_stock or 0), 0) // units_per_kit,
+        "secondary_product_id": kit.secondary_product_id,
+        "secondary_product_sku": kit.secondary_product.sku if kit.secondary_product else "",
+        "secondary_product_name": kit.secondary_product.name if kit.secondary_product else "",
+        "secondary_units_per_kit": secondary_units,
+        "base_stock": max(int(base_stock or 0), 0),
+        "secondary_stock": max(int(secondary_stock or 0), 0),
+        "available_kits": available_kits,
     }
 
 

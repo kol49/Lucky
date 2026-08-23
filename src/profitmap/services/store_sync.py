@@ -42,13 +42,19 @@ def stock_items_for_product(product: Product) -> list[dict[str, Any]]:
         units_per_kit = max(int(kit.units_per_kit or 1), 1)
         if not kit_sku:
             continue
+        kit_stock = base_stock // units_per_kit
+        secondary_units = max(int(kit.secondary_units_per_kit or 0), 0)
+        if kit.secondary_product and secondary_units:
+            kit_stock = min(kit_stock, stock_for_product(kit.secondary_product) // secondary_units)
         items.append(
             {
                 "sku": kit_sku,
-                "stock": base_stock // units_per_kit,
+                "stock": kit_stock,
                 "stock_is_units": False,
                 "base_sku": base_item["sku"],
                 "units_per_kit": units_per_kit,
+                "secondary_sku": kit.secondary_product.sku if kit.secondary_product else "",
+                "secondary_units_per_kit": secondary_units,
             }
         )
     return items
