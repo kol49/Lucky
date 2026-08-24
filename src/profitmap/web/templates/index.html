@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260823-sales-layout-sort" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260824-edit-kits" />
   </head>
   <body>
     <aside class="sidebar">
@@ -107,7 +107,8 @@
                   <option value="">Без второго товара</option>
                 </select>
                 <input name="secondary_units_per_kit" type="number" min="0" step="1" value="0" placeholder="Штук 2-го товара" />
-                <button type="submit">Добавить комплект</button>
+                <button type="submit" id="kitSubmit">Добавить комплект</button>
+                <button type="button" id="cancelKitEdit" class="secondary hidden">Отмена</button>
               </form>
               <table>
                 <thead>
@@ -447,6 +448,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260823-sales-layout-sort"></script>
+    <script src="/static/app.js?v=20260824-edit-kits"></script>
   </body>
 </html>

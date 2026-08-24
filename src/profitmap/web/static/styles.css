@@ -89,6 +89,12 @@ button.subtle {
   color: var(--text);
 }
 
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
 button.danger {
   background: var(--bad);
   color: #ffffff;
@@ -436,7 +442,7 @@ tbody tr.selected {
 }
 
 .kit-form {
-  grid-template-columns: minmax(170px, 1fr) minmax(190px, 1fr) 140px minmax(190px, 1fr) 140px 170px;
+  grid-template-columns: minmax(170px, 1fr) minmax(190px, 1fr) 140px minmax(190px, 1fr) 140px 170px 110px;
 }
 
 .sale-form {

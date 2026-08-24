@@ -325,31 +325,11 @@ def delete_supply(product_id: int, supply_id: int) -> dict[str, Any]:
 
 @app.post("/api/products/{product_id}/kits")
 def create_product_kit(product_id: int, payload: ProductKitPayload) -> dict[str, Any]:
-    kit_sku = payload.kit_sku.strip()
-    if not kit_sku:
-        raise HTTPException(status_code=400, detail="Kit SKU is required")
-    if payload.units_per_kit <= 0:
-        raise HTTPException(status_code=400, detail="Units per kit must be greater than zero")
     with SessionFactory() as session:
         product = session.get(Product, product_id)
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
-        secondary_product = None
-        secondary_units = 0
-        if payload.secondary_product_id:
-            if payload.secondary_product_id == product.id:
-                raise HTTPException(status_code=400, detail="Second product must be different")
-            secondary_product = session.get(Product, payload.secondary_product_id)
-            if not secondary_product:
-                raise HTTPException(status_code=404, detail="Second product not found")
-            if payload.secondary_units_per_kit <= 0:
-                raise HTTPException(status_code=400, detail="Second product quantity must be greater than zero")
-            secondary_units = payload.secondary_units_per_kit
-        if kit_sku == product.sku or (secondary_product and kit_sku == secondary_product.sku):
-            raise HTTPException(status_code=400, detail="Kit SKU must be different from component SKU")
-        existing_kit = session.scalar(select(ProductKit).where(ProductKit.kit_sku == kit_sku))
-        if existing_kit:
-            raise HTTPException(status_code=400, detail="This kit SKU is already used")
+        kit_sku, secondary_product, secondary_units = _validate_kit_payload(session, product, payload)
         kit = ProductKit(
             base_product_id=product.id,
             secondary_product_id=secondary_product.id if secondary_product else None,
@@ -363,6 +343,31 @@ def create_product_kit(product_id: int, payload: ProductKitPayload) -> dict[str,
         refresh_product_from_supplies(session, product)
         session.commit()
         _sync_product_stock(session, product)
+        return _product_detail(product)
+
+
+@app.put("/api/products/{product_id}/kits/{kit_id}")
+def update_product_kit(product_id: int, kit_id: int, payload: ProductKitPayload) -> dict[str, Any]:
+    with SessionFactory() as session:
+        product = session.get(Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        kit = session.get(ProductKit, kit_id)
+        if not kit or kit.base_product_id != product.id:
+            raise HTTPException(status_code=404, detail="Kit not found")
+        old_kit_sku = kit.kit_sku
+        kit_sku, secondary_product, secondary_units = _validate_kit_payload(session, product, payload, current_kit_id=kit.id)
+        kit.kit_sku = kit_sku
+        kit.kit_name = payload.kit_name.strip() or kit_sku
+        kit.units_per_kit = payload.units_per_kit
+        kit.secondary_product_id = secondary_product.id if secondary_product else None
+        kit.secondary_units_per_kit = secondary_units
+        session.flush()
+        refresh_product_from_supplies(session, product)
+        session.commit()
+        _sync_product_stock(session, product)
+        if old_kit_sku != kit.kit_sku:
+            sync_stock_items_to_store([{"sku": old_kit_sku, "stock": 0, "stock_is_units": False}])
         return _product_detail(product)
 
 
@@ -734,6 +739,38 @@ def _sync_deleted_product_stock(session, sku: str, deleted_product_id: int) -> d
     if related_products:
         return sync_products_to_store(related_products)
     return sync_stock_items_to_store([{"sku": _store_sync_base_sku(sku), "stock": 0}])
+
+
+def _validate_kit_payload(
+    session,
+    product: Product,
+    payload: ProductKitPayload,
+    current_kit_id: int | None = None,
+) -> tuple[str, Product | None, int]:
+    kit_sku = payload.kit_sku.strip()
+    if not kit_sku:
+        raise HTTPException(status_code=400, detail="Kit SKU is required")
+    if payload.units_per_kit <= 0:
+        raise HTTPException(status_code=400, detail="Units per kit must be greater than zero")
+
+    secondary_product = None
+    secondary_units = 0
+    if payload.secondary_product_id:
+        if payload.secondary_product_id == product.id:
+            raise HTTPException(status_code=400, detail="Second product must be different")
+        secondary_product = session.get(Product, payload.secondary_product_id)
+        if not secondary_product:
+            raise HTTPException(status_code=404, detail="Second product not found")
+        if payload.secondary_units_per_kit <= 0:
+            raise HTTPException(status_code=400, detail="Second product quantity must be greater than zero")
+        secondary_units = payload.secondary_units_per_kit
+
+    if kit_sku == product.sku or (secondary_product and kit_sku == secondary_product.sku):
+        raise HTTPException(status_code=400, detail="Kit SKU must be different from component SKU")
+    existing_kit = session.scalar(select(ProductKit).where(ProductKit.kit_sku == kit_sku))
+    if existing_kit and existing_kit.id != current_kit_id:
+        raise HTTPException(status_code=400, detail="This kit SKU is already used")
+    return kit_sku, secondary_product, secondary_units
 
 
 def _find_product_for_store_sku(session, sku: str) -> Product | None:

@@ -2,6 +2,7 @@ const money = new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH
 let state = {};
 let selectedProduct = null;
 let productSort = { key: "sku", direction: "asc" };
+let editingKitId = null;
 let editingSaleId = null;
 
 const salesSortDefaults = {
@@ -67,6 +68,7 @@ function bindActions() {
   document.getElementById("variableExpenseForm").addEventListener("submit", addVariableExpense);
   document.getElementById("supplyForm").addEventListener("submit", addSupply);
   document.getElementById("kitForm").addEventListener("submit", addKit);
+  document.getElementById("cancelKitEdit").addEventListener("click", cancelKitEdit);
   document.getElementById("saleForm").addEventListener("submit", addSale);
   document.getElementById("quickSaleForm").addEventListener("submit", addQuickSale);
   document.getElementById("quickSaleProduct").addEventListener("change", fillQuickSalePrice);
@@ -284,11 +286,17 @@ function renderKits() {
           <td>${escapeHtml(selectedProduct.sku)} · ${kit.units_per_kit} шт.</td>
           <td>${kit.secondary_product_id ? `${escapeHtml(kit.secondary_product_sku)} · ${kit.secondary_units_per_kit} шт.` : "—"}</td>
           <td class="numeric">${kit.available_kits} компл.</td>
-          <td class="action-cell"><button class="danger icon-button" data-kit-id="${kit.id}" title="Удалить комплект">Удалить</button></td>
+          <td class="action-cell">
+            <button class="icon-button" data-edit-kit-id="${kit.id}" title="Редактировать комплект">Изменить</button>
+            <button class="danger icon-button" data-kit-id="${kit.id}" title="Удалить комплект">Удалить</button>
+          </td>
         </tr>`,
     )
     .join("") : `<tr><td colspan="6" class="empty">Комплектов пока нет</td></tr>`;
 
+  document.querySelectorAll("[data-edit-kit-id]").forEach((button) => {
+    button.addEventListener("click", startKitEdit);
+  });
   document.querySelectorAll("[data-kit-id]").forEach((button) => {
     button.addEventListener("click", deleteKit);
   });
@@ -517,18 +525,50 @@ async function addKit(event) {
   payload.units_per_kit = Number(payload.units_per_kit || 0);
   payload.secondary_product_id = payload.secondary_product_id ? Number(payload.secondary_product_id) : null;
   payload.secondary_units_per_kit = Number(payload.secondary_units_per_kit || 0);
+  const url = editingKitId
+    ? `/api/products/${selectedProduct.id}/kits/${editingKitId}`
+    : `/api/products/${selectedProduct.id}/kits`;
   try {
-    selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits`, {
-      method: "POST",
+    selectedProduct = await fetchJson(url, {
+      method: editingKitId ? "PUT" : "POST",
       body: JSON.stringify(payload),
     });
-    form.reset();
-    form.querySelector("[name='units_per_kit']").value = 1;
-    form.querySelector("[name='secondary_units_per_kit']").value = 0;
+    resetKitForm();
     await loadState(selectedProduct.id);
   } catch (error) {
-    window.alert(`Не удалось добавить комплект: ${error.message}`);
+    window.alert(`Не удалось сохранить комплект: ${error.message}`);
   }
+}
+
+function startKitEdit(event) {
+  if (!selectedProduct) return;
+  const kitId = Number(event.currentTarget.dataset.editKitId);
+  const kit = (selectedProduct.kits || []).find((item) => Number(item.id) === kitId);
+  if (!kit) return;
+  editingKitId = kitId;
+  const form = document.getElementById("kitForm");
+  form.querySelector("[name='kit_sku']").value = kit.kit_sku || "";
+  form.querySelector("[name='kit_name']").value = kit.kit_name || "";
+  form.querySelector("[name='units_per_kit']").value = kit.units_per_kit || 1;
+  form.querySelector("[name='secondary_product_id']").value = kit.secondary_product_id ? String(kit.secondary_product_id) : "";
+  form.querySelector("[name='secondary_units_per_kit']").value = kit.secondary_units_per_kit || 0;
+  document.getElementById("kitSubmit").textContent = "Сохранить комплект";
+  document.getElementById("cancelKitEdit").classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelKitEdit() {
+  resetKitForm();
+}
+
+function resetKitForm() {
+  editingKitId = null;
+  const form = document.getElementById("kitForm");
+  form.reset();
+  form.querySelector("[name='units_per_kit']").value = 1;
+  form.querySelector("[name='secondary_units_per_kit']").value = 0;
+  document.getElementById("kitSubmit").textContent = "Добавить комплект";
+  document.getElementById("cancelKitEdit").classList.add("hidden");
 }
 
 async function deleteKit(event) {
@@ -536,6 +576,7 @@ async function deleteKit(event) {
   const kitId = event.currentTarget.dataset.kitId;
   const confirmed = window.confirm("Удалить этот комплект? Остаток этой вариации на сайте будет обнулен.");
   if (!confirmed) return;
+  if (Number(kitId) === editingKitId) resetKitForm();
   selectedProduct = await fetchJson(`/api/products/${selectedProduct.id}/kits/${kitId}`, { method: "DELETE" });
   await loadState(selectedProduct.id);
 }
