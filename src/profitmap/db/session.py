@@ -31,6 +31,8 @@ def migrate_database(engine) -> None:
         with engine.begin() as connection:
             if "comment" not in sales_columns:
                 connection.execute(text("ALTER TABLE sales ADD COLUMN comment TEXT DEFAULT ''"))
+            if "sale_channel" not in sales_columns:
+                connection.execute(text("ALTER TABLE sales ADD COLUMN sale_channel VARCHAR(32) DEFAULT ''"))
             if "external_source" not in sales_columns:
                 connection.execute(text("ALTER TABLE sales ADD COLUMN external_source VARCHAR(64) DEFAULT ''"))
             if "external_id" not in sales_columns:

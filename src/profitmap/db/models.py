@@ -120,6 +120,7 @@ class SaleRecord(Base):
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)
     revenue: Mapped[float] = mapped_column(Float, default=0.0)
     comment: Mapped[str] = mapped_column(Text, default="")
+    sale_channel: Mapped[str] = mapped_column(String(32), default="", index=True)
     external_source: Mapped[str] = mapped_column(String(64), default="", index=True)
     external_id: Mapped[str] = mapped_column(String(128), default="", index=True)
 

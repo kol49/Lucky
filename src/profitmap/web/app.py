@@ -111,6 +111,7 @@ class SalePayload(BaseModel):
     sale_date: date
     quantity: int
     unit_price: float
+    sale_channel: str = "olx"
     comment: str = ""
 
 
@@ -406,6 +407,7 @@ def create_sale(product_id: int, payload: SalePayload) -> dict[str, Any]:
             quantity=payload.quantity,
             unit_price=payload.unit_price,
             revenue=round(payload.quantity * payload.unit_price, 2),
+            sale_channel=_normalize_sale_channel(payload.sale_channel),
             comment=payload.comment,
         )
         session.add(sale)
@@ -438,6 +440,7 @@ def create_global_sale(payload: GlobalSalePayload) -> dict[str, Any]:
             quantity=payload.quantity,
             unit_price=payload.unit_price,
             revenue=round(payload.quantity * payload.unit_price, 2),
+            sale_channel=_normalize_sale_channel(payload.sale_channel),
             comment=payload.comment,
         )
         session.add(sale)
@@ -467,6 +470,7 @@ def update_global_sale(sale_id: int, payload: GlobalSalePayload) -> dict[str, An
         sale.quantity = payload.quantity
         sale.unit_price = payload.unit_price
         sale.revenue = round(payload.quantity * payload.unit_price, 2)
+        sale.sale_channel = _normalize_sale_channel(payload.sale_channel, sale.external_source)
         sale.comment = payload.comment
         session.flush()
         refresh_product_from_supplies(session, old_product)
@@ -543,6 +547,7 @@ def upsert_store_sales(payload: StoreSalePayload, request: Request) -> dict[str,
                 sale.quantity = resolved["quantity"]
                 sale.unit_price = resolved["unit_price"]
                 sale.revenue = resolved["revenue"]
+                sale.sale_channel = "site"
                 sale.comment = _store_sale_comment(payload, resolved)
                 touched_products[product.id] = product
                 updated.append(
@@ -771,6 +776,21 @@ def _validate_kit_payload(
     if existing_kit and existing_kit.id != current_kit_id:
         raise HTTPException(status_code=400, detail="This kit SKU is already used")
     return kit_sku, secondary_product, secondary_units
+
+
+def _normalize_sale_channel(value: str | None, external_source: str = "") -> str:
+    channel = (value or "").strip().lower()
+    if channel in {"site", "сайт", "website", "woo", "woocommerce"}:
+        return "site"
+    if channel in {"olx", "олх", "олкс"}:
+        return "olx"
+    if external_source == "woocommerce":
+        return "site"
+    return "olx"
+
+
+def _sale_channel_label(channel: str) -> str:
+    return "Сайт" if channel == "site" else "OLX"
 
 
 def _find_product_for_store_sku(session, sku: str) -> Product | None:
@@ -1114,9 +1134,12 @@ def _sale_dict(sale: SaleRecord, base_sale_price: float, purchase_total: float =
     purchase_price = (purchase_total / sale.quantity) if sale.quantity else 0.0
     profit = sale.revenue - purchase_total
     markup_percent = (profit / purchase_total * 100) if purchase_total else 0.0
+    sale_channel = _normalize_sale_channel(sale.sale_channel, sale.external_source)
     return {
         "id": sale.id,
         "sale_date": sale.sale_date.isoformat(),
+        "sale_channel": sale_channel,
+        "sale_channel_label": _sale_channel_label(sale_channel),
         "quantity": sale.quantity,
         "unit_price": sale.unit_price,
         "revenue": sale.revenue,
@@ -1240,6 +1263,8 @@ def _monthly_report_sales(session, start: date, end: date) -> tuple[list[dict[st
         markup_percent = (profit / purchase_total * 100) if purchase_total else 0.0
         row = {
             "sale_date": sale.sale_date,
+            "sale_channel": _normalize_sale_channel(sale.sale_channel, sale.external_source),
+            "sale_channel_label": _sale_channel_label(_normalize_sale_channel(sale.sale_channel, sale.external_source)),
             "product": product.name,
             "sku": product.sku,
             "quantity": sale.quantity,
@@ -1312,11 +1337,12 @@ def _write_monthly_analytics_sheet(sheet, month: str, totals: dict[str, float], 
 
 
 def _write_sales_sheet(sheet, sales: list[dict[str, Any]]) -> None:
-    sheet.append(["Дата", "Товар", "Артикул", "Количество", "Цена продажи", "Выручка", "Закупка", "Разница", "Наценка", "Комментарий"])
+    sheet.append(["Дата", "Канал", "Товар", "Артикул", "Количество", "Цена продажи", "Выручка", "Закупка", "Разница", "Наценка", "Комментарий"])
     for sale in sales:
         sheet.append(
             [
                 sale["sale_date"].isoformat(),
+                sale["sale_channel_label"],
                 sale["product"],
                 sale["sku"],
                 sale["quantity"],
@@ -1328,7 +1354,7 @@ def _write_sales_sheet(sheet, sales: list[dict[str, Any]]) -> None:
                 sale["comment"],
             ]
         )
-    _format_report_sheet(sheet, currency_columns={5, 6, 7, 8}, percent_columns={9}, header_rows={1})
+    _format_report_sheet(sheet, currency_columns={6, 7, 8, 9}, percent_columns={10}, header_rows={1})
 
 
 def _write_expenses_sheet(sheet, expenses: list[FixedExpense] | list[VariableExpense]) -> None:

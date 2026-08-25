@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ProfitMap Web</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260825-unified-sales-search" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260825-sale-channel" />
   </head>
   <body>
     <aside class="sidebar">
@@ -135,6 +135,10 @@
                 <input type="date" name="sale_date" required />
                 <input name="quantity" type="number" min="1" step="1" placeholder="Количество" required />
                 <input name="unit_price" type="number" min="0" step="0.01" placeholder="Цена продажи" required />
+                <select name="sale_channel" title="Канал продажи">
+                  <option value="olx">OLX</option>
+                  <option value="site">Сайт</option>
+                </select>
                 <input name="comment" placeholder="Комментарий / скидка" />
                 <button type="submit">Добавить продажу</button>
               </form>
@@ -142,6 +146,7 @@
                 <thead>
                   <tr>
                     <th>Дата</th>
+                    <th>Канал</th>
                     <th>Количество</th>
                     <th>Цена продажи</th>
                     <th>Закупка</th>
@@ -185,6 +190,13 @@
               <label>
                 Цена продажи
                 <input name="unit_price" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Канал
+                <select name="sale_channel">
+                  <option value="olx">OLX</option>
+                  <option value="site">Сайт</option>
+                </select>
               </label>
               <label>
                 Комментарий
@@ -261,6 +273,7 @@
             <thead>
               <tr>
                 <th class="sortable" data-sales-sort="date" aria-sort="descending">Дата</th>
+                <th>Канал</th>
                 <th class="sortable" data-sales-sort="product" aria-sort="none">Товар</th>
                 <th class="sortable" data-sales-sort="sku" aria-sort="none">SKU</th>
                 <th class="sortable" data-sales-sort="quantity" aria-sort="none">Количество</th>
@@ -440,6 +453,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260825-unified-sales-search"></script>
+    <script src="/static/app.js?v=20260825-sale-channel"></script>
   </body>
 </html>

@@ -446,7 +446,7 @@ tbody tr.selected {
 }
 
 .sale-form {
-  grid-template-columns: 150px 130px 150px minmax(220px, 1fr) 160px;
+  grid-template-columns: 150px 130px 150px 120px minmax(220px, 1fr) 160px;
 }
 
 .sales-page-grid {
@@ -459,7 +459,7 @@ tbody tr.selected {
 .quick-sale-form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.4fr) 150px 120px 150px minmax(180px, 1fr) 160px 110px;
+  grid-template-columns: minmax(220px, 1.4fr) 150px 120px 150px 120px minmax(180px, 1fr) 160px 110px;
 }
 
 .quick-sale-form label {

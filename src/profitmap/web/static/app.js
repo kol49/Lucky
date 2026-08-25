@@ -208,7 +208,7 @@ function renderSelectedProduct() {
     document.getElementById("kitSummary").textContent = "Добавьте товар, чтобы создавать комплекты.";
     document.getElementById("kitsTable").innerHTML = `<tr><td colspan="6" class="empty">Комплектов пока нет</td></tr>`;
     document.getElementById("salesSummary").textContent = "Добавьте товар, чтобы учитывать продажи.";
-    document.getElementById("salesTable").innerHTML = `<tr><td colspan="7" class="empty">Продаж пока нет</td></tr>`;
+    document.getElementById("salesTable").innerHTML = `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
     return;
   }
   document.getElementById("detailTitle").textContent = selectedProduct.name;
@@ -314,6 +314,7 @@ function renderSales() {
       (sale) => `
         <tr>
           <td>${sale.sale_date}</td>
+          <td>${escapeHtml(sale.sale_channel_label || "")}</td>
           <td class="numeric">${sale.quantity}</td>
           <td class="numeric">${money.format(sale.unit_price)}</td>
           <td class="numeric">${money.format(sale.purchase_total || 0)}</td>
@@ -324,7 +325,7 @@ function renderSales() {
           <td class="action-cell"><button class="danger icon-button" data-sale-id="${sale.id}" title="Удалить продажу">Удалить</button></td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="9" class="empty">Продаж пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
 
   document.querySelectorAll("[data-sale-id]").forEach((button) => {
     button.addEventListener("click", deleteSale);
@@ -367,6 +368,8 @@ function renderSalesPage() {
     const haystack = [
       sale.product_name,
       sale.product_sku,
+      sale.sale_channel_label,
+      sale.sale_channel,
       sale.comment,
       sale.unit_price,
       sale.purchase_total,
@@ -399,6 +402,7 @@ function renderSalesPage() {
       (sale) => `
         <tr>
           <td>${sale.sale_date}</td>
+          <td>${escapeHtml(sale.sale_channel_label || "")}</td>
           <td>${escapeHtml(sale.product_name)}</td>
           <td>${escapeHtml(sale.product_sku || "")}</td>
           <td class="numeric">${sale.quantity}</td>
@@ -413,7 +417,7 @@ function renderSalesPage() {
           </td>
         </tr>`,
     )
-    .join("") : `<tr><td colspan="10" class="empty">Продаж пока нет</td></tr>`;
+    .join("") : `<tr><td colspan="11" class="empty">Продаж пока нет</td></tr>`;
 
   document.querySelectorAll("[data-edit-sale-id]").forEach((button) => {
     button.addEventListener("click", startSaleEdit);
@@ -596,6 +600,7 @@ async function addSale(event) {
   });
   form.reset();
   form.querySelector("[name='sale_date']").valueAsDate = new Date();
+  form.querySelector("[name='sale_channel']").value = "olx";
   await loadState(selectedProduct.id);
 }
 
@@ -612,10 +617,12 @@ async function addQuickSale(event) {
   });
 
   const productId = payload.product_id;
+  const saleChannel = payload.sale_channel || "olx";
   editingSaleId = null;
   form.reset();
   form.querySelector("[name='sale_date']").valueAsDate = new Date();
   form.querySelector("[name='quantity']").value = 1;
+  form.querySelector("[name='sale_channel']").value = saleChannel;
   document.getElementById("quickSaleProduct").value = String(productId);
   document.getElementById("quickSaleSubmit").textContent = "Добавить продажу";
   document.getElementById("cancelSaleEdit").classList.add("hidden");
@@ -633,6 +640,7 @@ function startSaleEdit(event) {
   form.querySelector("[name='sale_date']").value = sale.sale_date;
   form.querySelector("[name='quantity']").value = sale.quantity;
   form.querySelector("[name='unit_price']").value = sale.unit_price;
+  form.querySelector("[name='sale_channel']").value = sale.sale_channel || "olx";
   form.querySelector("[name='comment']").value = sale.comment || "";
   document.getElementById("quickSaleSubmit").textContent = "Сохранить продажу";
   document.getElementById("cancelSaleEdit").classList.remove("hidden");
@@ -646,6 +654,7 @@ function cancelSaleEdit() {
   form.reset();
   form.querySelector("[name='sale_date']").valueAsDate = new Date();
   form.querySelector("[name='quantity']").value = 1;
+  form.querySelector("[name='sale_channel']").value = "olx";
   document.getElementById("quickSaleProduct").value = productId;
   document.getElementById("quickSaleSubmit").textContent = "Добавить продажу";
   document.getElementById("cancelSaleEdit").classList.add("hidden");
